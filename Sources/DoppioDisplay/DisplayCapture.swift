@@ -65,9 +65,11 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         case .display(let displayID):
             let display = try await Self.shareableDisplay(id: displayID)
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-            // Leave our own windows out so the preview never captures itself.
+            // Leave our own windows out so the preview never captures itself, except the
+            // software-mirror windows, which are the content of the display they cover.
             let ownApps = content.applications.filter { $0.processID == getpid() }
-            filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
+            let mirrors = content.windows.filter { SoftwareMirror.windowNumbers.contains($0.windowID) }
+            filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: mirrors)
         case .filter(let picked):
             filter = picked
         }

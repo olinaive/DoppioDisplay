@@ -19,6 +19,9 @@ final class DisplayStore {
     private(set) var previewStates: [PreviewSource: PreviewState] = [:]
     /// Bumped when arrangement or the main display changes, so views re-read display bounds.
     private(set) var layoutRevision = 0
+    /// Virtual displays showing a physical display through a software mirror.
+    private(set) var softwareSources: [UUID: CGDirectDisplayID] = [:]
+    @ObservationIgnored private var softwareMirrors: [UUID: SoftwareMirror] = [:]
     /// True while some virtual display asks to keep the Mac awake.
     private(set) var isKeepingAwake = false
     @ObservationIgnored private var awakeAssertion: IOPMAssertionID = 0
@@ -139,6 +142,7 @@ final class DisplayStore {
 
     func remove(_ id: UUID) {
         teardown(id)
+        softwareSources[id] = nil
         configs.removeAll { $0.id == id }
         save()
     }
@@ -299,27 +303,65 @@ final class DisplayStore {
         }
     }
 
-    /// True when the virtual display shows a physical one (the physical display is the master).
+    /// True when the virtual display shows the physical one (software mirror).
     func virtualMirrors(_ id: UUID, physical: CGDirectDisplayID) -> Bool {
-        guard let vid = liveIDs[id] else { return false }
-        return CGDisplayMirrorsDisplay(vid) == physical
+        softwareSources[id] == physical
     }
 
-    /// Makes a virtual display show a physical one, e.g. the built-in panel, so it can be
-    /// previewed or recorded at the virtual display's resolution. Not remembered across launches.
+    /// Physical display a virtual display is showing, if any.
+    func softwareSource(of id: UUID) -> CGDirectDisplayID? { softwareSources[id] }
+
+    /// Shows a physical display (e.g. the built-in panel) on a virtual one. Unlike hardware
+    /// mirroring, both keep their resolution and aspect ratio; the picture is scaled to fit.
     func toggleVirtualMirrorsPhysical(_ id: UUID, physical: PhysicalDisplay) {
-        guard let vid = liveIDs[id] else { return }
-        if CGDisplayMirrorsDisplay(vid) == physical.id {
-            report(DisplayManager.stopMirroring(vid), "Stop mirroring")
+        if softwareSources[id] == physical.id {
+            stopSoftwareMirror(id)
         } else {
-            // A display is either a master or a mirror: release monitors that mirror this one first.
-            for target in physicalDisplays where target.mirrorMaster == vid {
-                DisplayManager.stopMirroring(target.id)
+            // The physical display already shows this virtual one: drawing it back would loop forever.
+            if let vid = liveIDs[id], physical.mirrorMaster == vid {
+                lastError = "\(physical.name) already mirrors this virtual display. Stop that mirror first."
+                return
             }
-            update(id) { $0.mirrorTargets = [] }
-            report(DisplayManager.mirror(vid, of: physical.id), "Mirror")
+            stopSoftwareMirror(id)
+            softwareSources[id] = physical.id
+            startSoftwareMirror(id)
         }
-        refreshAfterMirrorChange()
+    }
+
+    private func startSoftwareMirror(_ id: UUID) {
+        guard let source = softwareSources[id], let vid = liveIDs[id] else { return }
+        // A virtual display that just came online may not be an NSScreen yet.
+        guard let mirror = SoftwareMirror(source: source, target: vid) else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self, self.softwareMirrors[id] == nil, self.softwareSources[id] != nil else { return }
+                self.startSoftwareMirror(id)
+            }
+            return
+        }
+        mirror.onStop = { [weak self, weak mirror] in
+            guard let self, let mirror, self.softwareMirrors[id] === mirror else { return }
+            self.softwareMirrors[id] = nil
+            self.softwareSources[id] = nil
+        }
+        softwareMirrors[id] = mirror
+        mirror.start()
+        refreshPreviews(of: id)
+    }
+
+    /// Previews leave the app's own windows out of the capture; rebuild them so a
+    /// software-mirror window that just appeared (or went away) is taken into account.
+    private func refreshPreviews(of id: UUID) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.previews[.virtual(id)]?.restartCapture()
+        }
+    }
+
+    private func stopSoftwareMirror(_ id: UUID, keepSource: Bool = false) {
+        let mirror = softwareMirrors.removeValue(forKey: id)
+        if !keepSource { softwareSources[id] = nil }
+        mirror?.onStop = nil
+        mirror?.stop()
+        if mirror != nil { refreshPreviews(of: id) }
     }
 
     /// Switches between the HiDPI and the 1:1 modes of a display that has both.
@@ -370,6 +412,10 @@ final class DisplayStore {
 
     func toggleMirror(_ id: UUID, to target: PhysicalDisplay) {
         guard let vid = liveIDs[id] else { return }
+        // Showing that display on this virtual one at the same time would loop forever.
+        if softwareSources[id] == target.id, target.mirrorMaster != vid {
+            stopSoftwareMirror(id)
+        }
         if target.mirrorMaster == vid {
             update(id) { $0.mirrorTargets.removeAll { $0 == target.key } }
             report(DisplayManager.stopMirroring(target.id), "Stop mirroring")
@@ -517,6 +563,8 @@ final class DisplayStore {
         liveIDs[config.id] = display.displayID
         DisplayLayout.apply(config, to: display.displayID)
         applyMirrors(for: config.id)
+        // Resolution changes recreate the display; carry a software mirror over to it.
+        if softwareSources[config.id] != nil { startSoftwareMirror(config.id) }
         refreshPhysical()
         if openPreview { showPreview(config.id) }
         return true
@@ -532,6 +580,7 @@ final class DisplayStore {
 
     private func teardown(_ id: UUID) {
         previews[.virtual(id)]?.close()
+        stopSoftwareMirror(id, keepSource: true)
         guard let display = displays.removeValue(forKey: id) else { return }
         let vid = display.displayID
         // Undo the mirror before the master disappears, or the target can stay blank.

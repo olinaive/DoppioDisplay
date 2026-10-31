@@ -44,6 +44,9 @@ DoppioDisplay создаёт **виртуальные дисплеи**, кото
 **Зеркалирование**
 - Зеркалирование виртуального экрана на внешний монитор — например, HiDPI 1920 × 1080 на 4K.
   Зеркало восстанавливается, когда монитор возвращается после сна или переподключения.
+- Вывод встроенного (или любого) экрана на виртуальный, при котором **оба сохраняют своё
+  разрешение и соотношение сторон**: картинка вписывается, а не подгоняет режим одного экрана
+  под другой, как при аппаратном зеркалировании.
 
 **Картинка в картинке**
 - Живое превью любого виртуального или физического экрана или отдельного окна (системный выбор).
@@ -156,6 +159,7 @@ open "doppio://preview?action=toggle"
 open "doppio://xdr?on=toggle&level=0.8"
 open "doppio://brightness?display=builtin&value=0.6"
 open "doppio://profile?name=Desk"
+open "doppio://show?name=Virtual%201&source=builtin" # встроенный экран на виртуальном
 open "doppio://menu"                               # открыть панель из menu bar
 open "doppio://panel?expand=builtin,arrangement"   # панель отдельным окном
 
@@ -163,7 +167,7 @@ doppio create width=2560 height=1440               # после Settings › Aut
 ```
 
 Команды: `create`, `enable`, `disable`, `toggle`, `remove`, `resolution`, `preview`,
-`mirror`, `xdr`, `brightness`, `profile`, `settings`, `menu`, `panel`. Параметры описаны
+`mirror`, `show`, `xdr`, `brightness`, `profile`, `settings`, `menu`, `panel`. Параметры описаны
 в [`URLCommands.swift`](Sources/DoppioDisplay/URLCommands.swift).
 
 ## Как это устроено

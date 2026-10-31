@@ -14,6 +14,7 @@ import AppKit
 ///     doppio://brightness?display=builtin|<name>&value=0.5
 ///     doppio://profile?name=Work             (action=apply|save; default apply)
 ///     doppio://settings?section=brightness
+///     doppio://show?name=Desk&source=builtin&on=1   (show a display on a virtual one, keeping both resolutions)
 ///     doppio://menu                           (opens the menu bar panel)
 ///     doppio://panel?expand=builtin,virtual,arrangement   (panel as a floating window)
 @MainActor
@@ -76,6 +77,17 @@ enum URLCommands {
             }
             guard let match else { return fail("No display matches \(wanted)") }
             BrightnessStore.shared.setBrightness(match.key, value)
+        case "show":
+            // doppio://show?name=Virtual&source=builtin — show a physical display on a virtual one.
+            guard let config = virtualDisplay(query) else { return fail("No virtual display matches \(url.query() ?? "")") }
+            let wanted = query["source"] ?? "builtin"
+            guard let source = store.physicalDisplays.first(where: { wanted == "builtin" ? $0.isBuiltin : matches($0.name, wanted) }) else {
+                return fail("No display matches \(wanted)")
+            }
+            let on = bool(query["on"]) ?? !store.virtualMirrors(config.id, physical: source.id)
+            if on != store.virtualMirrors(config.id, physical: source.id) {
+                store.toggleVirtualMirrorsPhysical(config.id, physical: source)
+            }
         case "menu":
             MenuBarController.shared.open()
         case "panel":

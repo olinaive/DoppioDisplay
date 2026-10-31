@@ -74,7 +74,8 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
             self?.updateGeometry { $0.cropToViewRect(rect) }
         }
         previewView.onHoverChange = { [weak self] hovering in
-            self?.setTrafficLightsVisible(hovering)
+            guard let self, !self.model.isFullScreen else { return }
+            self.setTrafficLightsVisible(hovering)
         }
         setTrafficLightsVisible(false)
         // The green button goes full screen (instead of zooming), like in other apps.
@@ -170,10 +171,13 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
 
     func windowDidEnterFullScreen(_ notification: Notification) {
         model.isFullScreen = true
+        // The title bar slides in at the top edge in full screen; its buttons must be visible there.
+        setTrafficLightsVisible(true)
     }
 
     func windowDidExitFullScreen(_ notification: Notification) {
         model.isFullScreen = false
+        setTrafficLightsVisible(model.isHovering)
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.level = model.isPinned ? .floating : .normal
         applyAspect()
@@ -203,6 +207,15 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.followMirroring() }
+        }
+    }
+
+    /// Rebuilds the capture, e.g. so a new software-mirror window on this display is included.
+    func restartCapture() {
+        guard !isClosed, !window.isMiniaturized else { return }
+        Task { @MainActor in
+            await capture.stop()
+            startCapture()
         }
     }
 

@@ -44,6 +44,9 @@ extra brightness** of every display — all from a Liquid Glass panel in the men
 **Mirroring**
 - Mirror a virtual display to an external monitor — e.g. a HiDPI 1920 × 1080 desktop on a
   4K screen. The mirror is re-applied when the monitor comes back after sleep or replugging.
+- Show the built-in (or any) display on a virtual one while **both keep their own
+  resolution and aspect ratio**: the picture is scaled to fit instead of forcing one mode
+  on both, as hardware mirroring does.
 
 **Picture in picture**
 - Live preview of any virtual or physical display, or of a single window (system picker).
@@ -156,6 +159,7 @@ open "doppio://preview?action=toggle"
 open "doppio://xdr?on=toggle&level=0.8"
 open "doppio://brightness?display=builtin&value=0.6"
 open "doppio://profile?name=Desk"
+open "doppio://show?name=Virtual%201&source=builtin" # built-in display on a virtual one
 open "doppio://menu"                               # open the menu bar panel
 open "doppio://panel?expand=builtin,arrangement"   # panel as a floating window
 
@@ -163,7 +167,7 @@ doppio create width=2560 height=1440               # after Settings › Automati
 ```
 
 Commands: `create`, `enable`, `disable`, `toggle`, `remove`, `resolution`, `preview`,
-`mirror`, `xdr`, `brightness`, `profile`, `settings`, `menu`, `panel`. Parameters are documented
+`mirror`, `show`, `xdr`, `brightness`, `profile`, `settings`, `menu`, `panel`. Parameters are documented
 in [`URLCommands.swift`](Sources/DoppioDisplay/URLCommands.swift).
 
 ## How it works

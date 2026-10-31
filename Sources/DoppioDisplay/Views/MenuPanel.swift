@@ -357,8 +357,9 @@ struct VirtualCard: View {
         DisplayCard(id: "virtual-\(config.id.uuidString)") {
             CardTitle(systemName: "display", title: config.name, subtitle: subtitle(live: live), active: live) {
                 Chip(text: config.hiDPIFor == nil ? "Virtual" : "HiDPI helper", tint: .blue)
-                if let vid, let master = store.physicalDisplays.first(where: { CGDisplayMirrorsDisplay(vid) == $0.id }) {
-                    Chip(text: "Mirrors \(master.isBuiltin ? "Built-in" : master.name)")
+                if let source = store.softwareSource(of: config.id),
+                   let shown = store.physicalDisplays.first(where: { $0.id == source }) {
+                    Chip(text: "Shows \(shown.isBuiltin ? "Built-in" : shown.name)")
                 }
                 if let vid, vid == CGMainDisplayID(), store.layoutRevision >= 0 { Chip(text: "Main") }
             }
