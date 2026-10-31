@@ -6,8 +6,9 @@
 #   scripts/qa.sh thread      # Thread Sanitizer
 #   scripts/qa.sh leaks       # release build, scenario × N, then `leaks` and memory footprint
 #
-# The scenario creates and removes a virtual display, opens previews, the floating panel
-# and every settings section. It quits a running DoppioDisplay first.
+# The scenario creates and removes a virtual display, opens previews, shows the built-in
+# display on it (software mirror), opens the menu bar panel, the floating panel and every
+# settings section. It quits a running DoppioDisplay first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -53,6 +54,9 @@ for round in $(seq 1 "$ROUNDS"); do
     url "preview?name=QA&action=show" 3
     url "resolution?name=QA&width=2560&height=1440" 5
     url "resolution?name=QA&width=1280&height=720&hidpi=0" 5
+    url "show?name=QA&source=builtin&on=1" 3
+    url "show?name=QA&source=builtin&on=0" 2
+    url "menu" 1
     url "panel?expand=builtin,virtual,arrangement,color" 2
     for section in general preview brightness profiles shortcuts automation permissions about; do
         url "settings?section=$section" 0.8
