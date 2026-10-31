@@ -63,6 +63,7 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
         model.isPinned = PreviewSettings.keepOnTop
         model.actions = PreviewActions(
             togglePin: { [weak self] in self?.togglePin() },
+            toggleFullScreen: { [weak self] in self?.toggleFullScreen() },
             beginCrop: { [weak self] in self?.previewView.beginCropSelection() },
             resetCrop: { [weak self] in self?.updateGeometry { $0.crop = CGRect(x: 0, y: 0, width: 1, height: 1) } },
             rotate: { [weak self] turns in self?.updateGeometry { $0.quarterTurns = ($0.quarterTurns + turns + 4) % 4 } },
@@ -144,6 +145,29 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
         model.framesPerSecond = fps
         PreviewSettings.framesPerSecond = fps
         Task { await capture.setFramesPerSecond(fps) }
+    }
+
+    /// Native full screen in its own Space. Floating, all-Spaces windows cannot go full
+    /// screen, so those traits are dropped on the way in and restored on the way out.
+    func toggleFullScreen() {
+        if !window.styleMask.contains(.fullScreen) {
+            window.level = .normal
+            window.collectionBehavior = [.fullScreenPrimary]
+            // A fixed aspect ratio would fight the screen's own shape.
+            window.resizeIncrements = NSSize(width: 1, height: 1)
+        }
+        window.toggleFullScreen(nil)
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        model.isFullScreen = true
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        model.isFullScreen = false
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.level = model.isPinned ? .floating : .normal
+        applyAspect()
     }
 
     private func togglePin() {
@@ -262,6 +286,7 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
 
 struct PreviewActions {
     var togglePin: () -> Void = {}
+    var toggleFullScreen: () -> Void = {}
     var beginCrop: () -> Void = {}
     var resetCrop: () -> Void = {}
     var rotate: (Int) -> Void = { _ in }
@@ -281,6 +306,7 @@ final class PreviewModel {
     var isHovering = false
     var isPinned = true
     var isSelectingCrop = false
+    var isFullScreen = false
     @ObservationIgnored var actions = PreviewActions()
 
     init(source: PreviewSource, displayID: CGDirectDisplayID?) {
@@ -394,6 +420,8 @@ final class PreviewView: NSView {
     override func keyDown(with event: NSEvent) {
         if model.isSelectingCrop, event.keyCode == 53 {
             endCropSelection()
+        } else if model.isFullScreen, event.keyCode == 53 {
+            model.actions.toggleFullScreen()
         } else {
             super.keyDown(with: event)
         }
@@ -500,6 +528,11 @@ struct PreviewToolbar: View {
                         MirrorMenu(config: config, compact: true)
                     }
                     viewMenu
+                    Button(action: model.actions.toggleFullScreen) {
+                        Image(systemName: model.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                    }
+                    .help(model.isFullScreen ? "Exit full screen (⎋)" : "Full screen")
+                    .buttonStyle(.glass)
                     Button(action: model.actions.togglePin) {
                         Image(systemName: model.isPinned ? "pin.fill" : "pin.slash")
                     }
