@@ -255,7 +255,9 @@ final class DisplayStore {
         alert.informativeText = "The menu bar and Dock moved. The previous main display comes back in 15 seconds unless you keep this one."
         alert.addButton(withTitle: "Keep")
         alert.addButton(withTitle: "Revert")
-        let timer = Timer(timeInterval: 15, repeats: false) { _ in NSApp.abortModal() }
+        let timer = Timer(timeInterval: 15, repeats: false) { _ in
+            MainActor.assumeIsolated { NSApp.abortModal() }
+        }
         RunLoop.main.add(timer, forMode: .modalPanel)
         NSApp.activate()
         let response = alert.runModal()

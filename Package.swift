@@ -28,5 +28,11 @@ let package = Package(
                 .linkedFramework("IOKit"),
             ]
         ),
+        .testTarget(
+            name: "DoppioDisplayTests",
+            dependencies: ["DoppioDisplay"],
+            path: "Tests/DoppioDisplayTests",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )

@@ -1,7 +1,8 @@
 import CoreMedia
 import CoreVideo
+@preconcurrency import IOSurface
 import QuartzCore
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 
 enum CaptureError: LocalizedError {
     case displayNotShareable(CGDirectDisplayID)
@@ -20,17 +21,29 @@ enum CaptureTarget {
     case filter(SCContentFilter)
 }
 
+/// Lets an IOSurface cross from the capture queue to the main queue.
+/// The surface is only handed over, never touched concurrently.
+private struct SurfaceBox: @unchecked Sendable {
+    let surface: IOSurfaceRef
+}
+
 /// Streams a display or window into a CALayer through ScreenCaptureKit.
 /// Crop and frame rate can change while streaming.
+/// State lives on the main actor; ScreenCaptureKit callbacks arrive on other
+/// queues and hop to the main actor before touching it.
+@MainActor
 final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private let layer: CALayer
-    private let queue = DispatchQueue(label: "doppio.capture", qos: .userInteractive)
+    private nonisolated let queue = DispatchQueue(label: "doppio.capture", qos: .userInteractive)
     private var stream: SCStream?
+    /// Bumped by `stop()`; a `start()` that was still awaiting sees the change and tears its stream down.
+    private var generation = 0
     private var configuration = SCStreamConfiguration()
     /// Content size in points and its point-to-pixel scale, known after `start`.
     private(set) var contentSize = CGSize.zero
     private var pixelScale: CGFloat = 1
-    private let maxWidth = 2560
+    /// Output width cap in pixels; follows the preview window so frames are not larger than shown.
+    private var maxWidth = 2560
 
     /// Normalized (0...1, top-left origin) part of the content to show; nil = everything.
     private(set) var crop: CGRect?
@@ -46,6 +59,7 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     func start(_ target: CaptureTarget) async throws {
         guard stream == nil else { return }
+        let startedGeneration = generation
         let filter: SCContentFilter
         switch target {
         case .display(let displayID):
@@ -69,10 +83,16 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
         try await stream.startCapture()
+        // Closed (or restarted) while starting: do not keep a stream nobody owns.
+        guard generation == startedGeneration, self.stream == nil else {
+            try? await stream.stopCapture()
+            return
+        }
         self.stream = stream
     }
 
     func stop() async {
+        generation += 1
         guard let stream else { return }
         self.stream = nil
         try? await stream.stopCapture()
@@ -82,6 +102,14 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     func setCrop(_ crop: CGRect?) async {
         self.crop = crop
+        await reconfigure()
+    }
+
+    /// Matches the captured frame size to the pixels actually on screen.
+    func setMaxWidth(_ pixels: Int) async {
+        let clamped = min(max(pixels, 640), 3840)
+        guard abs(clamped - maxWidth) > 32 else { return }
+        maxWidth = clamped
         await reconfigure()
     }
 
@@ -123,7 +151,7 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     // MARK: SCStreamOutput
 
-    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+    nonisolated func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen,
               let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
                 as? [[SCStreamFrameInfo: Any]],
@@ -133,20 +161,29 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate {
               let surface = CVPixelBufferGetIOSurface(pixelBuffer)?.takeUnretainedValue()
         else { return }
 
-        let layer = self.layer
+        let box = SurfaceBox(surface: surface)
         DispatchQueue.main.async { [weak self] in
-            layer.contents = surface
-            self?.onFrame?(surface)
+            MainActor.assumeIsolated { self?.present(box.surface) }
         }
+    }
+
+    private func present(_ surface: IOSurfaceRef) {
+        guard stream != nil else { return }
+        layer.contents = surface
+        onFrame?(surface)
     }
 
     // MARK: SCStreamDelegate
 
-    func stream(_ stream: SCStream, didStopWithError error: Error) {
-        guard stream === self.stream else { return }
-        self.stream = nil
+    nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
+        let stopped = ObjectIdentifier(stream)
+        let message = error as NSError
         DispatchQueue.main.async { [weak self] in
-            self?.onStop?(error)
+            MainActor.assumeIsolated {
+                guard let self, let current = self.stream, ObjectIdentifier(current) == stopped else { return }
+                self.stream = nil
+                self.onStop?(message)
+            }
         }
     }
 }

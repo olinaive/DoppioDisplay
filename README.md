@@ -204,6 +204,18 @@ capture stays on your Mac.
   `--brightness-probe`, `--xdr-probe`, `--color-probe`, `--config-probe`.
 - **Start from scratch** — quit the app and run `defaults delete app.doppiodisplay`.
 
+## Development
+
+```sh
+swift test                       # unit tests (preview geometry, snapping, settings decoding, …)
+scripts/qa.sh address            # Address Sanitizer + Main Thread Checker on a scripted scenario
+scripts/qa.sh thread             # Thread Sanitizer
+NOMSL=1 ROUNDS=6 scripts/qa.sh leaks   # leaks and memory footprint over repeated scenarios
+```
+
+The scenario drives the app through the `doppio://` URL scheme: it creates and removes a
+virtual display, opens previews, the floating panel and every settings section.
+
 ## Project layout
 
 ```
@@ -212,7 +224,8 @@ Sources/DoppioDisplay/   app (SwiftUI + AppKit)
   Views/                 menu bar panel, settings, controls
 Sources/CPrivateAPI/     private API declarations and Objective-C shims
 Resources/Doppio.icon    app icon (Icon Composer package)
-scripts/                 build, signing, CLI
+scripts/                 build, signing, CLI, QA
+Tests/                   unit tests
 design/tools/            icon generators
 ```
 

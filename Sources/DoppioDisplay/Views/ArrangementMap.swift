@@ -158,7 +158,7 @@ struct ArrangementMap: View {
 
     /// Closest position touching a side of another display, keeping some overlap along that side,
     /// magnetised to edge and centre alignment, and never overlapping anything.
-    private static func snap(_ rect: CGRect, to others: [CGRect]) -> CGRect? {
+    static func snap(_ rect: CGRect, to others: [CGRect]) -> CGRect? {
         let minOverlap: CGFloat = 80
         let magnet: CGFloat = 70
         var best: (frame: CGRect, distance: CGFloat)?
@@ -176,9 +176,11 @@ struct ArrangementMap: View {
                 let targets = vertical
                     ? [other.minY, other.maxY - rect.height, other.midY - rect.height / 2]
                     : [other.minX, other.maxX - rect.width, other.midX - rect.width / 2]
-                for target in targets {
-                    if vertical, abs(origin.y - target) < magnet { origin.y = target }
-                    if !vertical, abs(origin.x - target) < magnet { origin.x = target }
+                // Snap to the closest alignment within reach, not the last one checked.
+                let current = vertical ? origin.y : origin.x
+                if let target = targets.min(by: { abs($0 - current) < abs($1 - current) }),
+                   abs(target - current) < magnet {
+                    if vertical { origin.y = target } else { origin.x = target }
                 }
                 let frame = CGRect(origin: origin, size: rect.size)
                 guard !others.contains(where: { $0.insetBy(dx: 1, dy: 1).intersects(frame) }) else { continue }

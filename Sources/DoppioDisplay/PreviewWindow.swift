@@ -107,12 +107,17 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
         // Ignore accidental tiny selections.
         guard geometry.crop.width > 0.03, geometry.crop.height > 0.03 else { return }
         let cropChanged = geometry.crop != model.geometry.crop
+        let turnsChanged = geometry.quarterTurns != model.geometry.quarterTurns
         model.geometry = geometry
         applyAspect()
         previewView.needsLayout = true
-        if cropChanged {
+        if cropChanged || turnsChanged {
             let crop = geometry.isCropped ? geometry.crop : nil
-            Task { await capture.setCrop(crop) }
+            let width = shownPixelWidth
+            Task {
+                await capture.setCrop(crop)
+                await capture.setMaxWidth(width)
+            }
         }
     }
 
@@ -152,6 +157,7 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
         Task { @MainActor in
             do {
                 await capture.setFramesPerSecond(model.framesPerSecond)
+                await capture.setMaxWidth(shownPixelWidth)
                 try await capture.start(target)
                 if contentAspect != capture.contentSize, capture.contentSize.width > 0 {
                     contentAspect = capture.contentSize
@@ -162,6 +168,20 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
                 DisplayStore.shared.lastError = "Preview failed: \(error.localizedDescription)"
             }
         }
+    }
+
+    /// Width of the preview in pixels along the content's own width (rotation swaps axes).
+    private var shownPixelWidth: Int {
+        let size = previewView.bounds.size
+        let along = model.geometry.quarterTurns.isMultiple(of: 2) ? size.width : size.height
+        // Divide by the crop so a cropped region is still captured sharply.
+        let scale = window.backingScaleFactor / max(model.geometry.crop.width, 0.05)
+        return Int((along * scale).rounded(.up))
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        let width = shownPixelWidth
+        Task { await capture.setMaxWidth(width) }
     }
 
     // MARK: Dock thumbnail

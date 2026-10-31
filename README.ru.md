@@ -202,6 +202,18 @@ doppio create width=2560 height=1440               # после Settings › Aut
   `--brightness-probe`, `--xdr-probe`, `--color-probe`, `--config-probe`.
 - **Начать с нуля** — закрой приложение и выполни `defaults delete app.doppiodisplay`.
 
+## Разработка
+
+```sh
+swift test                       # юнит-тесты (геометрия превью, прилипание, чтение настроек, …)
+scripts/qa.sh address            # Address Sanitizer + Main Thread Checker на сценарии
+scripts/qa.sh thread             # Thread Sanitizer
+NOMSL=1 ROUNDS=6 scripts/qa.sh leaks   # утечки и память на повторяющихся сценариях
+```
+
+Сценарий управляет приложением через URL-схему `doppio://`: создаёт и удаляет виртуальный
+дисплей, открывает превью, плавающую панель и все разделы настроек.
+
 ## Структура проекта
 
 ```
@@ -210,7 +222,8 @@ Sources/DoppioDisplay/   приложение (SwiftUI + AppKit)
   Views/                 панель menu bar, настройки, контролы
 Sources/CPrivateAPI/     объявления приватных API и Objective-C-прослойки
 Resources/Doppio.icon    иконка приложения (пакет Icon Composer)
-scripts/                 сборка, подпись, CLI
+scripts/                 сборка, подпись, CLI, QA
+Tests/                   юнит-тесты
 design/tools/            генераторы иконки
 ```
 

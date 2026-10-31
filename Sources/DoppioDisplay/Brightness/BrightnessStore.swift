@@ -124,9 +124,10 @@ final class BrightnessStore {
                 }
                 results[id] = readout
             }
+            let readouts = results
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    BrightnessStore.shared.finishProbe(displays, results: results)
+                    BrightnessStore.shared.finishProbe(displays, results: readouts)
                 }
             }
         }

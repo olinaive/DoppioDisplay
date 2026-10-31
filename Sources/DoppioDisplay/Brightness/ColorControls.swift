@@ -135,12 +135,11 @@ final class ColorControls {
         ColorSyncIterateInstalledProfiles({ info, userInfo in
             guard let info = info as? [String: Any], let userInfo else { return true }
             let box = Unmanaged<Box>.fromOpaque(userInfo).takeUnretainedValue()
-            let profileClass = info[kColorSyncProfileClass.takeUnretainedValue() as String] as? String
-            let space = info[kColorSyncProfileColorSpace.takeUnretainedValue() as String] as? String
-            guard profileClass == (kColorSyncSigDisplayClass.takeUnretainedValue() as String),
-                  space == (kColorSyncSigRgbData.takeUnretainedValue() as String),
-                  let url = info[kColorSyncProfileURL.takeUnretainedValue() as String] as? URL,
-                  let name = info[kColorSyncProfileDescription.takeUnretainedValue() as String] as? String
+            let keys = ColorSyncKeys.self
+            guard info[keys.profileClass] as? String == keys.displayClass,
+                  info[keys.colorSpace] as? String == keys.rgb,
+                  let url = info[keys.url] as? URL,
+                  let name = info[keys.description] as? String
             else { return true }
             box.profiles.append(ColorProfile(url: url, name: name))
             return true
@@ -150,4 +149,15 @@ final class ColorControls {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             .filter { seen.insert($0.name).inserted }
     }
+}
+
+/// ColorSync's C string constants, read once. They are immutable in practice; the C
+/// headers declare them as `var`, which strict concurrency checking flags anyway.
+private enum ColorSyncKeys {
+    static let profileClass = kColorSyncProfileClass.takeUnretainedValue() as String
+    static let colorSpace = kColorSyncProfileColorSpace.takeUnretainedValue() as String
+    static let displayClass = kColorSyncSigDisplayClass.takeUnretainedValue() as String
+    static let rgb = kColorSyncSigRgbData.takeUnretainedValue() as String
+    static let url = kColorSyncProfileURL.takeUnretainedValue() as String
+    static let description = kColorSyncProfileDescription.takeUnretainedValue() as String
 }
