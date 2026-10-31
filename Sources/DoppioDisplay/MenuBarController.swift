@@ -118,20 +118,22 @@ final class MenuBarController: NSObject, NSWindowDelegate {
         // Local monitors run on the main thread; the box only carries the event across the closure type.
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown], handler: { event in
             let box = EventBox(event: event)
-            return MainActor.assumeIsolated { MenuBarController.shared.handleLocal(box.event) }
+            let consumed = MainActor.assumeIsolated { MenuBarController.shared.handleLocal(box.event) }
+            return consumed ? nil : event
         }) {
             monitors.append(local)
         }
     }
 
-    private func handleLocal(_ event: NSEvent) -> NSEvent? {
-        guard let panel else { return event }
+    /// Returns true when the event is used up (Escape closing the panel).
+    private func handleLocal(_ event: NSEvent) -> Bool {
+        guard let panel else { return false }
         if event.type == .keyDown {
             if event.keyCode == 53, event.window === panel {
                 close()
-                return nil
+                return true
             }
-            return event
+            return false
         }
         let window = event.window
         // Inside the panel, its popovers, pop-up menus and alerts, or on the icon itself: keep open.
@@ -139,7 +141,7 @@ final class MenuBarController: NSObject, NSWindowDelegate {
             || (window.map { $0.level.rawValue >= NSWindow.Level.modalPanel.rawValue } ?? false)
             || (window.map { String(describing: type(of: $0)).contains("Popover") } ?? false)
         if !inside { close() }
-        return event
+        return false
     }
 
     private func stopMonitoring() {
