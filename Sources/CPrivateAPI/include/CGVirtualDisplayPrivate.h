@@ -61,4 +61,9 @@ NSArray<NSString *> * _Nullable DPPresetNames(CGDirectDisplayID display);
 NSString * _Nullable DPActivePresetName(CGDirectDisplayID display);
 BOOL DPSetPreset(CGDirectDisplayID display, NSString *name);
 
+// Display rotation (MonitorPanel). Degrees: 0, 90, 180, 270.
+BOOL DPDisplayCanRotate(CGDirectDisplayID display);
+int DPDisplayRotation(CGDirectDisplayID display);
+BOOL DPDisplaySetRotation(CGDirectDisplayID display, int degrees);
+
 NS_ASSUME_NONNULL_END

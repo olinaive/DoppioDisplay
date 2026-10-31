@@ -1,3 +1,4 @@
+import CPrivateAPI
 import SwiftUI
 
 struct MenuPanel: View {
@@ -111,6 +112,15 @@ struct PhysicalCard: View {
             if let control {
                 SettingsGroup {
                     brightnessSlider(control)
+                    if control.method == .software {
+                        // Explains why the slider dims the picture instead of the backlight.
+                        Text("Software dimming — this monitor does not answer DDC.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.bottom, 6)
+                    }
                     if let contrast = control.contrast {
                         SliderRow(lowIcon: "circle.righthalf.filled", highIcon: "circle.righthalf.filled",
                                   value: Binding(get: { contrast }, set: { brightness.setContrast(display.key, $0) }))
@@ -140,6 +150,9 @@ struct PhysicalCard: View {
             }
             SettingsGroup {
                 modeRows
+            }
+            SettingsGroup {
+                mirrorRow
                 if let control, control.method == .ddc, let input = control.inputSource {
                     SettingsRow(title: "Input") {
                         ValueMenu(value: DDCService.inputNames[input] ?? "Input \(input)") {
@@ -151,9 +164,6 @@ struct PhysicalCard: View {
                             }
                         }
                     }
-                }
-                if let control {
-                    SettingsRow(title: "Brightness Control") { MethodChip(method: control.method) }
                 }
             }
             ColorSection(id: "color-\(display.key)", displayID: display.id, isBuiltin: display.isBuiltin)
@@ -192,6 +202,29 @@ struct PhysicalCard: View {
                 }
             }
         }
+        if DPDisplayCanRotate(display.id) {
+            let rotation = Int(DPDisplayRotation(display.id))
+            SettingsRow(title: "Orientation") {
+                ValueMenu(value: Self.rotationTitle(rotation)) {
+                    ForEach([0, 90, 180, 270], id: \.self) { degrees in
+                        Toggle(Self.rotationTitle(degrees), isOn: Binding(
+                            get: { rotation == degrees },
+                            set: { _ in store.setRotation(display, degrees) }
+                        ))
+                    }
+                }
+            }
+        }
+        if DisplayModes.canToggleHiDPI(display.id), let current {
+            SettingsRow(title: "HiDPI (Retina)") {
+                SwitchToggle(isOn: Binding(get: { DisplayModes.isHiDPI(current) }, set: { store.setHiDPI(display, $0) }))
+            }
+        } else if !display.isBuiltin, !DisplayModes.hasHiDPIModes(display.id) {
+            // No Retina modes of its own: a mirrored virtual HiDPI display provides them.
+            SettingsRow(title: "HiDPI (Retina)", hint: "via virtual display") {
+                SwitchToggle(isOn: Binding(get: { store.hasVirtualHiDPI(display) }, set: { store.setVirtualHiDPI(display, $0) }))
+            }
+        }
         let rates = DisplayModes.refreshRates(for: display.id)
         if rates.count > 1, let current {
             SettingsRow(title: "Refresh Rate") {
@@ -205,6 +238,31 @@ struct PhysicalCard: View {
                 }
             }
         }
+    }
+
+    /// Other physical displays that can show this one.
+    @ViewBuilder
+    private var mirrorRow: some View {
+        let targets = store.physicalDisplays.filter { $0.id != display.id }
+        let active = targets.filter { $0.mirrorMaster == display.id }
+        SettingsRow(title: "Mirror To") {
+            ValueMenu(value: active.isEmpty ? "Off" : active.map(\.name).joined(separator: ", ")) {
+                if targets.isEmpty {
+                    Text("No other displays connected")
+                }
+                ForEach(targets, id: \.id) { target in
+                    Toggle(target.isBuiltin ? "Built-in Display" : target.title, isOn: Binding(
+                        get: { target.mirrorMaster == display.id },
+                        set: { _ in store.togglePhysicalMirror(source: display, target: target) }
+                    ))
+                }
+            }
+        }
+        .disabled(display.mirrorMaster != kCGNullDirectDisplay)
+    }
+
+    static func rotationTitle(_ degrees: Int) -> String {
+        degrees == 0 ? "Standard" : "\(degrees)°"
     }
 
     private var subtitle: String {
@@ -265,7 +323,7 @@ struct VirtualCard: View {
         let vid = store.liveIDs[config.id]
         DisplayCard(id: "virtual-\(config.id.uuidString)") {
             CardTitle(systemName: "display", title: config.name, subtitle: subtitle(live: live), active: live) {
-                Chip(text: "Virtual", tint: .blue)
+                Chip(text: config.hiDPIFor == nil ? "Virtual" : "HiDPI helper", tint: .blue)
                 if let vid, vid == CGMainDisplayID(), store.layoutRevision >= 0 { Chip(text: "Main") }
             }
         } trailing: {
@@ -328,7 +386,7 @@ struct VirtualCard: View {
                             Text("No external displays connected")
                         }
                         ForEach(candidates, id: \.id) { target in
-                            Toggle(target.title, isOn: Binding(
+                            Toggle(target.isBuiltin ? "Built-in Display (custom resolution)" : target.title, isOn: Binding(
                                 get: { store.isMirroring(config.id, to: target) },
                                 set: { _ in store.toggleMirror(config.id, to: target) }
                             ))

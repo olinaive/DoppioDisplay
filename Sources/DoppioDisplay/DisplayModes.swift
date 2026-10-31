@@ -9,11 +9,24 @@ enum DisplayModes {
         return modes.filter { $0.isUsableForDesktopGUI() }
     }
 
-    /// One entry per point size. On Retina panels only the HiDPI variants are offered, like System Settings.
-    static func resolutions(for display: CGDirectDisplayID) -> [CGDisplayMode] {
+    static func isHiDPI(_ mode: CGDisplayMode) -> Bool { mode.pixelWidth > mode.width }
+
+    /// Whether the display offers both HiDPI and 1:1 modes, so HiDPI can be switched.
+    static func canToggleHiDPI(_ display: CGDirectDisplayID) -> Bool {
         let modes = all(for: display)
-        let hiDPI = modes.filter { $0.pixelWidth > $0.width }
-        let pool = hiDPI.isEmpty ? modes : hiDPI
+        return modes.contains(where: isHiDPI) && modes.contains { !isHiDPI($0) }
+    }
+
+    static func hasHiDPIModes(_ display: CGDirectDisplayID) -> Bool {
+        all(for: display).contains(where: isHiDPI)
+    }
+
+    /// One entry per point size, from the HiDPI or the 1:1 modes (default: whichever is in use).
+    static func resolutions(for display: CGDirectDisplayID, hiDPI: Bool? = nil) -> [CGDisplayMode] {
+        let modes = all(for: display)
+        let wantHiDPI = hiDPI ?? CGDisplayCopyDisplayMode(display).map(isHiDPI) ?? true
+        let filtered = modes.filter { isHiDPI($0) == wantHiDPI }
+        let pool = filtered.isEmpty ? modes : filtered
         let current = CGDisplayCopyDisplayMode(display)
         var bySize: [String: CGDisplayMode] = [:]
         for mode in pool {
@@ -36,6 +49,15 @@ enum DisplayModes {
         var byRate: [Int: CGDisplayMode] = [:]
         for mode in same { byRate[Int((mode.refreshRate * 100).rounded())] = mode }
         return byRate.values.sorted { $0.refreshRate > $1.refreshRate }
+    }
+
+    /// Mode to switch to when HiDPI is turned on or off: the default one in that pool,
+    /// otherwise the one closest to the current size.
+    static func modeForHiDPI(_ on: Bool, display: CGDirectDisplayID) -> CGDisplayMode? {
+        let pool = resolutions(for: display, hiDPI: on)
+        if let preferred = pool.first(where: isDefault) { return preferred }
+        guard let current = CGDisplayCopyDisplayMode(display) else { return pool.last }
+        return pool.min { abs($0.width - current.width) < abs($1.width - current.width) }
     }
 
     static func isDefault(_ mode: CGDisplayMode) -> Bool {

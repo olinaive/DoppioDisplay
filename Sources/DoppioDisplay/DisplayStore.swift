@@ -1,4 +1,5 @@
 import AppKit
+import CPrivateAPI
 import IOKit.pwr_mgt
 import Observation
 import ScreenCaptureKit
@@ -112,7 +113,11 @@ final class DisplayStore {
     func previewState(_ source: PreviewSource) -> PreviewState { previewStates[source] ?? .closed }
 
     /// Monitors that can mirror a virtual display; the built-in panel hosts the preview.
-    var mirrorCandidates: [PhysicalDisplay] { physicalDisplays.filter { !$0.isBuiltin } }
+    /// Monitors that can mirror a virtual display, including the built-in panel
+    /// (which then shows the virtual display at its resolution, like a custom mode).
+    var mirrorCandidates: [PhysicalDisplay] {
+        physicalDisplays.sorted { !$0.isBuiltin && $1.isBuiltin }
+    }
 
     func isMirroring(_ id: UUID, to target: PhysicalDisplay) -> Bool {
         guard let vid = liveIDs[id] else { return false }
@@ -121,7 +126,7 @@ final class DisplayStore {
 
     // MARK: Config changes
 
-    func addDisplay(_ customize: (inout VirtualDisplayConfig) -> Void = { _ in }) {
+    func addDisplay(openPreview: Bool? = nil, _ customize: (inout VirtualDisplayConfig) -> Void = { _ in }) {
         var config = VirtualDisplayConfig.makeDefault(index: configs.count + 1)
         config.width = defaultPreset.width
         config.height = defaultPreset.height
@@ -129,7 +134,7 @@ final class DisplayStore {
         customize(&config)
         configs.append(config)
         save()
-        createDisplay(for: config, openPreview: previewOnCreate)
+        createDisplay(for: config, openPreview: openPreview ?? previewOnCreate)
     }
 
     func remove(_ id: UUID) {
@@ -248,11 +253,19 @@ final class DisplayStore {
         let error = DisplayLayout.makeMain(display)
         guard error == .success else { return report(error, "Make main display") }
         refreshPhysical()
-        layoutRevision += 1
+        confirmOrRevert("Keep this main display?",
+                        "The menu bar and Dock moved. The previous main display comes back in 15 seconds unless you keep this one.") {
+            DisplayLayout.makeMain(previous)
+            self.refreshPhysical()
+        }
+    }
 
+    /// For changes that can leave a screen unusable (rotation, mirroring onto the built-in
+    /// panel, moving the menu bar): asks to keep them and reverts after 15 seconds otherwise.
+    private func confirmOrRevert(_ title: String, _ message: String, revert: () -> Void) {
         let alert = NSAlert()
-        alert.messageText = "Keep this main display?"
-        alert.informativeText = "The menu bar and Dock moved. The previous main display comes back in 15 seconds unless you keep this one."
+        alert.messageText = title
+        alert.informativeText = message
         alert.addButton(withTitle: "Keep")
         alert.addButton(withTitle: "Revert")
         let timer = Timer(timeInterval: 15, repeats: false) { _ in
@@ -262,10 +275,73 @@ final class DisplayStore {
         NSApp.activate()
         let response = alert.runModal()
         timer.invalidate()
-        if response != .alertFirstButtonReturn {
-            DisplayLayout.makeMain(previous)
+        if response != .alertFirstButtonReturn { revert() }
+    }
+
+    // MARK: Physical displays
+
+    /// Makes `target` show `source` (hardware mirror), or stops it if it already does.
+    func togglePhysicalMirror(source: PhysicalDisplay, target: PhysicalDisplay) {
+        if target.mirrorMaster == source.id {
+            report(DisplayManager.stopMirroring(target.id), "Stop mirroring")
             refreshPhysical()
-            layoutRevision += 1
+            return
+        }
+        let error = DisplayManager.mirror(target.id, of: source.id)
+        guard error == .success else { return report(error, "Mirror") }
+        refreshPhysical()
+        if target.isBuiltin {
+            confirmOrRevert("Keep mirroring on the built-in display?",
+                            "The built-in display now shows \(source.name). It goes back in 15 seconds unless you keep it.") {
+                DisplayManager.stopMirroring(target.id)
+                self.refreshPhysical()
+            }
+        }
+    }
+
+    /// Switches between the HiDPI and the 1:1 modes of a display that has both.
+    func setHiDPI(_ display: PhysicalDisplay, _ on: Bool) {
+        guard let mode = DisplayModes.modeForHiDPI(on, display: display.id) else { return }
+        setMode(display.id, mode)
+    }
+
+    /// For monitors without HiDPI modes: a virtual HiDPI display at half the monitor's
+    /// pixel size, mirrored onto it, so the monitor shows a sharp Retina-style desktop.
+    func setVirtualHiDPI(_ display: PhysicalDisplay, _ on: Bool) {
+        if !on {
+            for config in configs where config.hiDPIFor == display.key { remove(config.id) }
+            return
+        }
+        guard !configs.contains(where: { $0.hiDPIFor == display.key }) else { return }
+        addDisplay(openPreview: false) { config in
+            config.name = "\(display.name) HiDPI"
+            config.width = UInt32(max(display.pixelWidth / 2, 640))
+            config.height = UInt32(max(display.pixelHeight / 2, 480))
+            config.hiDPI = true
+            config.mirrorTargets = [display.key]
+            config.hiDPIFor = display.key
+        }
+    }
+
+    func hasVirtualHiDPI(_ display: PhysicalDisplay) -> Bool {
+        configs.contains { $0.hiDPIFor == display.key && isLive($0.id) }
+    }
+
+    /// Rotates a physical display (0, 90, 180, 270) and asks to keep it.
+    func setRotation(_ display: PhysicalDisplay, _ degrees: Int) {
+        let previous = Int(DPDisplayRotation(display.id))
+        guard previous != degrees else { return }
+        guard DPDisplaySetRotation(display.id, Int32(degrees)) else {
+            lastError = "\(display.name) cannot be rotated."
+            return
+        }
+        // Let the reconfiguration land before asking.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            self.refreshPhysical()
+            self.confirmOrRevert("Keep this rotation?", "\(display.name) goes back in 15 seconds unless you keep it.") {
+                DPDisplaySetRotation(display.id, Int32(previous))
+                self.refreshPhysical()
+            }
         }
     }
 
@@ -281,7 +357,18 @@ final class DisplayStore {
             }
             update(id) { $0.mirrorTargets.append(target.key) }
             attemptedMirrors.remove("\(vid)->\(target.id)")
-            report(DisplayManager.mirror(target.id, of: vid), "Mirror")
+            let error = DisplayManager.mirror(target.id, of: vid)
+            report(error, "Mirror")
+            refreshPhysical()
+            if error == .success, target.isBuiltin {
+                confirmOrRevert("Keep mirroring on the built-in display?",
+                                "The built-in display now shows the virtual display. It goes back in 15 seconds unless you keep it.") {
+                    self.update(id) { $0.mirrorTargets.removeAll { $0 == target.key } }
+                    DisplayManager.stopMirroring(target.id)
+                    self.refreshPhysical()
+                }
+            }
+            return
         }
         refreshPhysical()
     }

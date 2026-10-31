@@ -34,6 +34,8 @@ struct VirtualDisplayConfig: Codable, Identifiable, Hashable {
     /// Top-left corner relative to the built-in display's top-left, in points. Nil = let macOS decide.
     var relativeOrigin: CGPoint?
     var keepAwake: KeepAwake = .never
+    /// Set when this display only exists to give a monitor HiDPI (mirrored onto it); the monitor's key.
+    var hiDPIFor: String?
 
     var resolutionTitle: String { "\(width) × \(height)" }
     var isPortrait: Bool { height > width }
@@ -58,6 +60,7 @@ struct VirtualDisplayConfig: Codable, Identifiable, Hashable {
         placement = try c.decodeIfPresent(DisplayPlacement.self, forKey: .placement) ?? .automatic
         relativeOrigin = try c.decodeIfPresent(CGPoint.self, forKey: .relativeOrigin)
         keepAwake = try c.decodeIfPresent(KeepAwake.self, forKey: .keepAwake) ?? .never
+        hiDPIFor = try c.decodeIfPresent(String.self, forKey: .hiDPIFor)
     }
 
     /// Same serial across launches lets macOS remember the arrangement.

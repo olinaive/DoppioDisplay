@@ -307,27 +307,3 @@ struct ErrorBanner: View {
         .glassEffect(.regular.tint(.orange.opacity(0.25)), in: .rect(cornerRadius: 12))
     }
 }
-
-struct MethodChip: View {
-    let method: BrightnessMethod
-
-    var body: some View {
-        Chip(text: method.rawValue, tint: tint).help(help)
-    }
-
-    private var tint: Color {
-        switch method {
-        case .native: .green
-        case .ddc: .blue
-        case .software: .orange
-        }
-    }
-
-    private var help: String {
-        switch method {
-        case .native: "Hardware backlight via macOS DisplayServices"
-        case .ddc: "Hardware brightness via DDC/CI"
-        case .software: "No hardware control found; dims the image with gamma"
-        }
-    }
-}

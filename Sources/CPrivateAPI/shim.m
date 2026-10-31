@@ -148,3 +148,24 @@ BOOL DPSetPreset(CGDirectDisplayID displayID, NSString *name) {
     }
     return NO;
 }
+
+// MARK: - Rotation (MonitorPanel)
+
+BOOL DPDisplayCanRotate(CGDirectDisplayID displayID) {
+    id display = DPMonitorDisplay(displayID);
+    if (![display respondsToSelector:@selector(canChangeOrientation)]) return NO;
+    return ((BOOL (*)(id, SEL))objc_msgSend)(display, @selector(canChangeOrientation));
+}
+
+int DPDisplayRotation(CGDirectDisplayID displayID) {
+    id display = DPMonitorDisplay(displayID);
+    if (![display respondsToSelector:@selector(orientation)]) return 0;
+    return ((int (*)(id, SEL))objc_msgSend)(display, @selector(orientation));
+}
+
+BOOL DPDisplaySetRotation(CGDirectDisplayID displayID, int degrees) {
+    id display = DPMonitorDisplay(displayID);
+    if (!DPDisplayCanRotate(displayID) || ![display respondsToSelector:@selector(setOrientation:)]) return NO;
+    ((void (*)(id, SEL, int))objc_msgSend)(display, @selector(setOrientation:), degrees);
+    return YES;
+}
