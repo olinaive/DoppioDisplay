@@ -13,6 +13,10 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
     private let previewView: PreviewView
     private let capture: DisplayCapture
     private let target: CaptureTarget
+    /// Display actually being captured: the previewed one, or the display it mirrors.
+    /// Capturing a mirror itself shows its old desktop flickering through.
+    private var capturedDisplay: CGDirectDisplayID?
+    private var screenObserver: NSObjectProtocol?
     private let model: PreviewModel
     private var contentAspect: CGSize
     private var isClosed = false
@@ -153,12 +157,41 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// What to capture right now, following mirroring.
+    private var effectiveTarget: CaptureTarget {
+        guard case .display(let id) = target else { return target }
+        let master = CGDisplayMirrorsDisplay(id)
+        return .display(master == kCGNullDirectDisplay ? id : master)
+    }
+
+    private func observeMirroring() {
+        guard case .display = target, screenObserver == nil else { return }
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.followMirroring() }
+        }
+    }
+
+    /// Restarts the capture on the right display when mirroring starts or stops.
+    private func followMirroring() {
+        guard case .display(let wanted) = effectiveTarget, wanted != capturedDisplay,
+              !isClosed, !window.isMiniaturized else { return }
+        Task { @MainActor in
+            await capture.stop()
+            startCapture()
+        }
+    }
+
     private func startCapture() {
+        observeMirroring()
+        let current = effectiveTarget
+        if case .display(let id) = current { capturedDisplay = id }
         Task { @MainActor in
             do {
                 await capture.setFramesPerSecond(model.framesPerSecond)
                 await capture.setMaxWidth(shownPixelWidth)
-                try await capture.start(target)
+                try await capture.start(current)
                 if contentAspect != capture.contentSize, capture.contentSize.width > 0 {
                     contentAspect = capture.contentSize
                     applyAspect()
@@ -219,6 +252,8 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         isClosed = true
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        screenObserver = nil
         if let displayID = model.displayID { CursorCapture.shared.end(for: displayID) }
         Task { await capture.stop() }
         onStateChange?(.closed)

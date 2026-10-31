@@ -47,9 +47,14 @@ private struct PopoverMaterial: NSViewRepresentable {
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
-/// Keeps the menu bar panel attached to the menu bar. When displays are reconfigured
-/// (mirroring, arrangement, resolution) macOS moves open windows to fit the new layout,
-/// which pushes the menu bar window down the screen; this puts it back.
+extension Notification.Name {
+    /// Posted right before a change that reconfigures displays (mirroring, rotation, modes).
+    static let doppioWillReconfigureDisplays = Notification.Name("DoppioWillReconfigureDisplays")
+}
+
+/// Closes the menu bar panel before displays are reconfigured. macOS moves open windows to
+/// fit a new display layout, which would drag the panel down the screen; system menus
+/// simply close before such changes, and so does this one. The floating panel window stays.
 struct MenuBarWindowAnchor: NSViewRepresentable {
     func makeNSView(context: Context) -> AnchorView { AnchorView() }
     func updateNSView(_ nsView: AnchorView, context: Context) {}
@@ -63,27 +68,13 @@ struct MenuBarWindowAnchor: NSViewRepresentable {
             observer = nil
             guard window != nil else { return }
             observer = NotificationCenter.default.addObserver(
-                forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+                forName: .doppioWillReconfigureDisplays, object: nil, queue: .main
             ) { [weak self] _ in
-                // Let AppKit finish its own repositioning, then correct it (twice: mirroring
-                // can arrive as more than one reconfiguration).
-                for delay in [0.15, 0.6] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.reanchor() }
+                MainActor.assumeIsolated {
+                    guard let window = self?.window, window.isVisible,
+                          window !== PanelWindowController.shared.window else { return }
+                    window.close()
                 }
-            }
-        }
-
-        private func reanchor() {
-            MainActor.assumeIsolated {
-                guard let window, window.isVisible, window !== PanelWindowController.shared.window else { return }
-                let midX = window.frame.midX
-                guard let screen = NSScreen.screens.first(where: { $0.frame.minX <= midX && midX <= $0.frame.maxX })
-                        ?? window.screen ?? NSScreen.main else { return }
-                let visible = screen.visibleFrame
-                var frame = window.frame
-                frame.origin.y = visible.maxY - frame.height
-                frame.origin.x = min(max(frame.origin.x, visible.minX), visible.maxX - frame.width)
-                if frame != window.frame { window.setFrame(frame, display: true) }
             }
         }
 
