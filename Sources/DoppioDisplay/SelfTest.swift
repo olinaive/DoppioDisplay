@@ -112,4 +112,34 @@ enum SelfTest {
 
         return 0
     }
+
+    static func mirrorProbe() -> Int32 {
+        guard let builtin = DisplayManager.onlineDisplayIDs().first(where: { CGDisplayIsBuiltin($0) != 0 }) else {
+            print("no built-in display")
+            return 1
+        }
+        var config = VirtualDisplayConfig(name: "Mirror Probe", width: 1280, height: 720)
+        config.hiDPI = false
+        guard let display = VirtualDisplay(config: config), display.waitUntilOnline() else {
+            print("virtual display not created")
+            return 1
+        }
+        let vid = display.displayID
+        func state(_ label: String) {
+            print("\(label): virtual mirrors \(CGDisplayMirrorsDisplay(vid)) (built-in is \(builtin)), online: \(DisplayManager.onlineDisplayIDs().contains(vid))")
+        }
+        func wait(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
+
+        print("mirror:", DisplayManager.mirror(vid, of: builtin).rawValue)
+        state("right after mirror")
+        wait(1)
+        state("1 s after mirror")
+        print("stop:", DisplayManager.stopMirroring(vid).rawValue)
+        state("right after stop")
+        wait(1)
+        state("1 s after stop")
+        display.destroy()
+        _ = VirtualDisplay.waitUntilOffline(vid)
+        return 0
+    }
 }

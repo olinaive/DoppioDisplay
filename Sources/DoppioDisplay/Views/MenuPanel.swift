@@ -288,6 +288,8 @@ struct PhysicalCard: View {
                     }
                 }
             }
+            // macOS keeps the built menu and its check marks; a new identity rebuilds it.
+            .id("mirror-\(display.id)-\(activeNames.joined(separator: ","))-\(store.layoutRevision)")
         }
         .disabled(display.mirrorMaster != kCGNullDirectDisplay)
     }
@@ -427,6 +429,8 @@ struct VirtualCard: View {
                             ))
                         }
                     }
+                    // macOS keeps the built menu and its check marks; a new identity rebuilds it.
+                    .id("mirror-\(config.id)-\(mirrorTitle)-\(store.layoutRevision)")
                 }
                 SettingsRow(title: "Keep Mac Awake") {
                     ValueMenu(value: config.keepAwake.title) {

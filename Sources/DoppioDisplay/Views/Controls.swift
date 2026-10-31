@@ -141,6 +141,8 @@ struct MirrorMenu: View {
         .fixedSize()
         .buttonStyle(.glass)
         .tint(active.isEmpty ? nil : .accentColor)
+        // macOS keeps the built menu and its check marks; a new identity rebuilds it.
+        .id("mirror-\(config.id)-\(active.map(\.key).joined(separator: ","))-\(store.layoutRevision)")
         .help("Mirror this virtual display to an external monitor")
     }
 }

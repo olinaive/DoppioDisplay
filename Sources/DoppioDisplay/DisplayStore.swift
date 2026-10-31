@@ -284,17 +284,17 @@ final class DisplayStore {
     func togglePhysicalMirror(source: PhysicalDisplay, target: PhysicalDisplay) {
         if target.mirrorMaster == source.id {
             report(DisplayManager.stopMirroring(target.id), "Stop mirroring")
-            refreshPhysical()
+            refreshAfterMirrorChange()
             return
         }
         let error = DisplayManager.mirror(target.id, of: source.id)
         guard error == .success else { return report(error, "Mirror") }
-        refreshPhysical()
+        refreshAfterMirrorChange()
         if target.isBuiltin {
             confirmOrRevert("Keep mirroring on the built-in display?",
                             "The built-in display now shows \(source.name). It goes back in 15 seconds unless you keep it.") {
                 DisplayManager.stopMirroring(target.id)
-                self.refreshPhysical()
+                self.refreshAfterMirrorChange()
             }
         }
     }
@@ -319,7 +319,7 @@ final class DisplayStore {
             update(id) { $0.mirrorTargets = [] }
             report(DisplayManager.mirror(vid, of: physical.id), "Mirror")
         }
-        refreshPhysical()
+        refreshAfterMirrorChange()
     }
 
     /// Switches between the HiDPI and the 1:1 modes of a display that has both.
@@ -382,18 +382,18 @@ final class DisplayStore {
             attemptedMirrors.remove("\(vid)->\(target.id)")
             let error = DisplayManager.mirror(target.id, of: vid)
             report(error, "Mirror")
-            refreshPhysical()
+            refreshAfterMirrorChange()
             if error == .success, target.isBuiltin {
                 confirmOrRevert("Keep mirroring on the built-in display?",
                                 "The built-in display now shows the virtual display. It goes back in 15 seconds unless you keep it.") {
                     self.update(id) { $0.mirrorTargets.removeAll { $0 == target.key } }
                     DisplayManager.stopMirroring(target.id)
-                    self.refreshPhysical()
+                    self.refreshAfterMirrorChange()
                 }
             }
             return
         }
-        refreshPhysical()
+        refreshAfterMirrorChange()
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -583,6 +583,12 @@ final class DisplayStore {
             }
         }
         refreshPhysical()
+    }
+
+    /// Mirror changes settle in WindowServer a moment after the call returns; read them again then.
+    private func refreshAfterMirrorChange() {
+        refreshPhysical()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self.refreshPhysical() }
     }
 
     private func refreshPhysical() {

@@ -36,6 +36,11 @@ struct DoppioDisplayApp: App {
         if let index = arguments.firstIndex(of: "--export-menubar"), index + 1 < arguments.count {
             exit(AppIcon.exportMenuBarGlyphs(to: URL(fileURLWithPath: arguments[index + 1])) ? 0 : 1)
         }
+        // `--mirror-probe` mirrors the built-in display onto a temporary virtual display and back,
+        // printing what CoreGraphics reports right away and a moment later.
+        if arguments.contains("--mirror-probe") {
+            exit(SelfTest.mirrorProbe())
+        }
         // `--export-iconset <dir>` writes the PNGs iconutil needs for AppIcon.icns.
         if let index = arguments.firstIndex(of: "--export-iconset"), index + 1 < arguments.count {
             exit(AppIcon.exportIconset(to: URL(fileURLWithPath: arguments[index + 1])) ? 0 : 1)
