@@ -1,0 +1,15 @@
+# Build output
+.build/
+build/
+.swiftpm/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# Design scratch: HTML mockups, rendered SF Symbols (not redistributable) and previews.
+# Only the icon generators are kept.
+design/*
+!design/tools/
+design/tools/*
+!design/tools/make-doppio-icon.py
+!design/tools/make-doppio-iconpackage.py

@@ -1,0 +1,19 @@
+#!/bin/zsh
+# Command-line front end for the doppio:// URL scheme.
+#   doppio create width=2560 height=1440 hidpi=1
+#   doppio preview action=toggle
+#   doppio xdr on=toggle
+#   doppio brightness display=builtin value=0.6
+set -euo pipefail
+if (( $# == 0 )); then
+    echo "usage: doppio <create|enable|disable|toggle|remove|resolution|preview|mirror|xdr|brightness> [key=value ...]" >&2
+    exit 64
+fi
+command=$1; shift
+query=""
+for pair in "$@"; do
+    key=${pair%%=*}
+    value=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${pair#*=}")
+    query+="${query:+&}${key}=${value}"
+done
+open -g "doppio://${command}${query:+?$query}"
