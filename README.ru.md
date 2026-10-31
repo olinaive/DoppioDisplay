@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/icon.png" width="128" alt="Иконка DoppioDisplay">
+  <img src="docs/screenshots/icon.png" width="128" alt="DoppioDisplay icon">
 </p>
 
 <h1 align="center">DoppioDisplay</h1>
@@ -9,16 +9,19 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> ·
   <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-blue">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-lightgrey">
-  <img alt="Лицензия: PolyForm Noncommercial" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-orange">
+  <img alt="License: PolyForm Noncommercial" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-orange">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/panel.png" width="250" alt="Панель в menu bar">
-  <img src="docs/screenshots/panel-builtin.png" width="250" alt="Настройки встроенного экрана">
-  <img src="docs/screenshots/panel-virtual.png" width="250" alt="Настройки виртуального экрана">
+  <a href="https://github.com/olinaive/DoppioDisplay/releases/latest"><b>⬇︎ Скачать для macOS</b></a>
+  &nbsp;·&nbsp;
+  <a href="README.md">English</a>
+</p>
+
+<p align="center">
+  <img src="docs/hero.png" alt="Панель DoppioDisplay в menu bar">
 </p>
 
 ## Что это
@@ -63,20 +66,39 @@ DoppioDisplay создаёт **виртуальные дисплеи**, кото
 - Глобальные хоткеи, URL-схема `doppio://` и команда `doppio` в терминале — работает
   с Raycast, Alfred, «Быстрыми командами» и скриптами.
 
-<p align="center">
-  <img src="docs/screenshots/panel-arrangement.png" width="250" alt="Раскладка">
-  <img src="docs/screenshots/settings-general.png" width="520" alt="Настройки">
-</p>
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/settings-general.png" alt="Settings — General"></td>
+    <td width="50%"><img src="docs/screenshots/settings-brightness.png" alt="Settings — Brightness"></td>
+  </tr>
+  <tr>
+    <td align="center">Настройки · Основные</td>
+    <td align="center">Настройки · Яркость и XDR Boost</td>
+  </tr>
+</table>
 
 ## Требования
 
 - macOS 26 Tahoe или новее (разработано и проверено на macOS 27.2).
 - Apple Silicon (проверено на MacBook Pro M1 Pro). На Intel не проверялось.
-- Для сборки: Xcode 26 или новее.
 
 ## Установка
 
-Готовых сборок пока нет, собирается из исходников:
+1. Скачай **DoppioDisplay-x.y.z.zip** из [последнего релиза](https://github.com/olinaive/DoppioDisplay/releases/latest) и распакуй.
+2. Перенеси **DoppioDisplay.app** в **Программы**.
+3. Открой. Приложение не нотаризовано Apple (для этого нужен платный аккаунт разработчика),
+   поэтому первый запуск macOS заблокирует: открой **Системные настройки › Конфиденциальность
+   и безопасность**, пролистай вниз и нажми **«Всё равно открыть»** рядом с DoppioDisplay.
+   Это нужно сделать один раз.
+
+   Или в Терминале: `xattr -dr com.apple.quarantine /Applications/DoppioDisplay.app`
+
+Обновления подписаны тем же сертификатом, поэтому разрешения сохраняются, когда заменяешь
+приложение новой версией.
+
+### Сборка из исходников
+
+Нужен Xcode 26 или новее.
 
 ```sh
 git clone https://github.com/olinaive/DoppioDisplay.git
@@ -87,7 +109,7 @@ cd DoppioDisplay
 ./scripts/create-signing-identity.sh
 
 ./scripts/build-app.sh          # → build/DoppioDisplay.app
-open build/DoppioDisplay.app    # или сначала перенеси в /Applications
+open build/DoppioDisplay.app
 ```
 
 `create-signing-identity.sh` добавляет в связку ключей login самоподписанный сертификат
@@ -106,6 +128,8 @@ open build/DoppioDisplay.app    # или сначала перенеси в /App
 ведёт **Settings › Permissions**.
 
 ## Как пользоваться
+
+<img src="docs/screenshots/panel.png" width="300" align="right" alt="Свёрнутая панель">
 
 1. Нажми значок в menu bar → **New Virtual Display**.
 2. Раскрой карточку экрана: разрешение, HiDPI, частота, ориентация, цвет или

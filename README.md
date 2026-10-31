@@ -9,16 +9,19 @@
 </p>
 
 <p align="center">
-  <a href="README.ru.md">Русский</a> ·
   <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-blue">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-lightgrey">
   <img alt="License: PolyForm Noncommercial" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-orange">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/panel.png" width="250" alt="Menu bar panel">
-  <img src="docs/screenshots/panel-builtin.png" width="250" alt="Built-in display settings">
-  <img src="docs/screenshots/panel-virtual.png" width="250" alt="Virtual display settings">
+  <a href="https://github.com/olinaive/DoppioDisplay/releases/latest"><b>⬇︎ Download for macOS</b></a>
+  &nbsp;·&nbsp;
+  <a href="README.ru.md">Русский</a>
+</p>
+
+<p align="center">
+  <img src="docs/hero.png" alt="DoppioDisplay menu bar panel">
 </p>
 
 ## What it does
@@ -64,20 +67,38 @@ extra brightness** of every display — all from a Liquid Glass panel in the men
 - Global shortcuts, a `doppio://` URL scheme and a `doppio` command-line tool — works with
   Raycast, Alfred, Shortcuts and scripts.
 
-<p align="center">
-  <img src="docs/screenshots/panel-arrangement.png" width="250" alt="Arrangement">
-  <img src="docs/screenshots/settings-general.png" width="520" alt="Settings">
-</p>
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/settings-general.png" alt="Settings — General"></td>
+    <td width="50%"><img src="docs/screenshots/settings-brightness.png" alt="Settings — Brightness"></td>
+  </tr>
+  <tr>
+    <td align="center">Settings · General</td>
+    <td align="center">Settings · Brightness and XDR Boost</td>
+  </tr>
+</table>
 
 ## Requirements
 
 - macOS 26 Tahoe or later (developed and tested on macOS 27.2).
 - Apple Silicon (tested on an M1 Pro MacBook Pro). Intel Macs are untested.
-- To build: Xcode 26 or later.
 
 ## Install
 
-There are no prebuilt releases yet; build it from source:
+1. Download **DoppioDisplay-x.y.z.zip** from the [latest release](https://github.com/olinaive/DoppioDisplay/releases/latest) and unzip it.
+2. Move **DoppioDisplay.app** to **Applications**.
+3. Open it. The app is not notarized by Apple (that needs a paid developer account), so the
+   first launch is blocked: open **System Settings › Privacy & Security**, scroll down and
+   click **Open Anyway** next to DoppioDisplay. You only do this once.
+
+   Or in Terminal: `xattr -dr com.apple.quarantine /Applications/DoppioDisplay.app`
+
+Updates are signed with the same certificate, so macOS keeps your permissions when you
+replace the app with a newer version.
+
+### Build from source
+
+Requires Xcode 26 or later.
 
 ```sh
 git clone https://github.com/olinaive/DoppioDisplay.git
@@ -88,7 +109,7 @@ cd DoppioDisplay
 ./scripts/create-signing-identity.sh
 
 ./scripts/build-app.sh          # → build/DoppioDisplay.app
-open build/DoppioDisplay.app    # or move it to /Applications first
+open build/DoppioDisplay.app
 ```
 
 `create-signing-identity.sh` adds a self-signed certificate named *DoppioDisplay Local
@@ -107,6 +128,8 @@ Grant them in **System Settings › Privacy & Security**; the app links there fr
 **Settings › Permissions**.
 
 ## Usage
+
+<img src="docs/screenshots/panel.png" width="300" align="right" alt="Collapsed panel">
 
 1. Click the menu bar icon, then **New Virtual Display**.
 2. Expand the display card to change resolution, HiDPI, refresh rate, orientation, color,

@@ -13,3 +13,4 @@ design/*
 design/tools/*
 !design/tools/make-doppio-icon.py
 !design/tools/make-doppio-iconpackage.py
+!design/tools/make-readme-hero.py
