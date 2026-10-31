@@ -299,6 +299,29 @@ final class DisplayStore {
         }
     }
 
+    /// True when the virtual display shows a physical one (the physical display is the master).
+    func virtualMirrors(_ id: UUID, physical: CGDirectDisplayID) -> Bool {
+        guard let vid = liveIDs[id] else { return false }
+        return CGDisplayMirrorsDisplay(vid) == physical
+    }
+
+    /// Makes a virtual display show a physical one, e.g. the built-in panel, so it can be
+    /// previewed or recorded at the virtual display's resolution. Not remembered across launches.
+    func toggleVirtualMirrorsPhysical(_ id: UUID, physical: PhysicalDisplay) {
+        guard let vid = liveIDs[id] else { return }
+        if CGDisplayMirrorsDisplay(vid) == physical.id {
+            report(DisplayManager.stopMirroring(vid), "Stop mirroring")
+        } else {
+            // A display is either a master or a mirror: release monitors that mirror this one first.
+            for target in physicalDisplays where target.mirrorMaster == vid {
+                DisplayManager.stopMirroring(target.id)
+            }
+            update(id) { $0.mirrorTargets = [] }
+            report(DisplayManager.mirror(vid, of: physical.id), "Mirror")
+        }
+        refreshPhysical()
+    }
+
     /// Switches between the HiDPI and the 1:1 modes of a display that has both.
     func setHiDPI(_ display: PhysicalDisplay, _ on: Bool) {
         guard let mode = DisplayModes.modeForHiDPI(on, display: display.id) else { return }

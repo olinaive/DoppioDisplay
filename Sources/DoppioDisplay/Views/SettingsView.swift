@@ -168,6 +168,7 @@ private var appVersion: String {
 private struct GeneralSettings: View {
     @AppStorage("showQuickSliders") private var showQuickSliders = true
     @AppStorage("menuBarIcon") private var menuBarIcon = AppIcon.MenuBarStyle.twin.rawValue
+    @AppStorage("panelSeveralExpanded") private var severalExpanded = false
     private var store: DisplayStore { .shared }
 
     var body: some View {
@@ -200,6 +201,10 @@ private struct GeneralSettings: View {
                 }
                 .pickerStyle(.radioGroup)
                 Toggle("Show quick brightness sliders on collapsed displays", isOn: $showQuickSliders)
+                Toggle(isOn: $severalExpanded) {
+                    Text("Allow several expanded displays")
+                    Text("Off: opening a display's settings closes the others, so the menu stays short.")
+                }
             }
         }
     }

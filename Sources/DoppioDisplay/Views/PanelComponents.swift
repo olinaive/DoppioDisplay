@@ -37,7 +37,20 @@ final class PanelState {
     /// sliding rows against a jumping frame looks broken. Only the revealed content
     /// animates (see `revealTransition`).
     func toggle(_ id: String) {
-        if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
+        if expanded.contains(id) {
+            expanded.remove(id)
+            return
+        }
+        // Accordion: opening a display card closes the other cards (sub-sections stay as they are).
+        if Self.isCard(id), !UserDefaults.standard.bool(forKey: "panelSeveralExpanded") {
+            expanded = expanded.filter { !Self.isCard($0) }
+        }
+        expanded.insert(id)
+    }
+
+    /// Top-level cards in the panel, as opposed to sections inside a card (e.g. "color-…").
+    private static func isCard(_ id: String) -> Bool {
+        id.hasPrefix("display-") || id.hasPrefix("virtual-") || id == "arrangement"
     }
 }
 

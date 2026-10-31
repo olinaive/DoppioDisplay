@@ -70,7 +70,9 @@ struct ArrangementMap: View {
                                frame: CGDisplayBounds(display.id), configID: nil, mirroredBy: mirrors(of: display.id)))
         }
         for config in store.configs {
-            guard let vid = store.liveIDs[config.id], virtualIDs.contains(vid) else { continue }
+            // A virtual display that mirrors another one has no place of its own in the arrangement.
+            guard let vid = store.liveIDs[config.id], virtualIDs.contains(vid),
+                  CGDisplayMirrorsDisplay(vid) == kCGNullDirectDisplay else { continue }
             result.append(Item(id: vid, name: config.name, frame: CGDisplayBounds(vid), configID: config.id,
                                mirroredBy: mirrors(of: vid)))
         }

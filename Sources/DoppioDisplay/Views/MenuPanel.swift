@@ -2,7 +2,15 @@ import CPrivateAPI
 import SwiftUI
 
 struct MenuPanel: View {
+    @State private var cardsHeight: CGFloat = 200
     private var store: DisplayStore { .shared }
+
+    /// Leaves room for the menu bar, the panel's header and footer, and a margin.
+    private static var maxCardsHeight: CGFloat {
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+        return max((screen?.visibleFrame.height ?? 800) - 150, 260)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -13,20 +21,27 @@ struct MenuPanel: View {
             }
 
             SectionTitle("Displays").padding(.top, 4)
-            GlassEffectContainer(spacing: 8) {
-                VStack(spacing: 8) {
-                    if let builtin = store.physicalDisplays.first(where: \.isBuiltin) {
-                        PhysicalCard(display: builtin)
+            // The cards scroll when they would not fit on screen; header and footer stay put.
+            ScrollView(.vertical) {
+                GlassEffectContainer(spacing: 8) {
+                    VStack(spacing: 8) {
+                        if let builtin = store.physicalDisplays.first(where: \.isBuiltin) {
+                            PhysicalCard(display: builtin)
+                        }
+                        ForEach(store.configs) { config in
+                            VirtualCard(config: config)
+                        }
+                        ForEach(store.physicalDisplays.filter { !$0.isBuiltin }, id: \.id) { display in
+                            PhysicalCard(display: display)
+                        }
+                        ArrangementCard()
                     }
-                    ForEach(store.configs) { config in
-                        VirtualCard(config: config)
-                    }
-                    ForEach(store.physicalDisplays.filter { !$0.isBuiltin }, id: \.id) { display in
-                        PhysicalCard(display: display)
-                    }
-                    ArrangementCard()
                 }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { cardsHeight = $0 }
             }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(.automatic)
+            .frame(height: min(cardsHeight, Self.maxCardsHeight))
 
             Button {
                 store.addDisplay()
@@ -43,6 +58,10 @@ struct MenuPanel: View {
         }
         .padding(12)
         .frame(width: 360)
+        // Do not start with the cursor in a text field (the display name): typing would rename it.
+        .onAppear {
+            DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) }
+        }
     }
 
     private var header: some View {
@@ -244,10 +263,12 @@ struct PhysicalCard: View {
     @ViewBuilder
     private var mirrorRow: some View {
         let targets = store.physicalDisplays.filter { $0.id != display.id }
-        let active = targets.filter { $0.mirrorMaster == display.id }
+        let virtuals = store.configs.filter { store.isLive($0.id) && $0.hiDPIFor == nil }
+        let activeNames = targets.filter { $0.mirrorMaster == display.id }.map(\.name)
+            + virtuals.filter { store.virtualMirrors($0.id, physical: display.id) }.map(\.name)
         SettingsRow(title: "Mirror To") {
-            ValueMenu(value: active.isEmpty ? "Off" : active.map(\.name).joined(separator: ", ")) {
-                if targets.isEmpty {
+            ValueMenu(value: activeNames.isEmpty ? "Off" : activeNames.joined(separator: ", ")) {
+                if targets.isEmpty && virtuals.isEmpty {
                     Text("No other displays connected")
                 }
                 ForEach(targets, id: \.id) { target in
@@ -255,6 +276,16 @@ struct PhysicalCard: View {
                         get: { target.mirrorMaster == display.id },
                         set: { _ in store.togglePhysicalMirror(source: display, target: target) }
                     ))
+                }
+                if !virtuals.isEmpty {
+                    Section("Virtual Displays") {
+                        ForEach(virtuals) { config in
+                            Toggle(config.name, isOn: Binding(
+                                get: { store.virtualMirrors(config.id, physical: display.id) },
+                                set: { _ in store.toggleVirtualMirrorsPhysical(config.id, physical: display) }
+                            ))
+                        }
+                    }
                 }
             }
         }
@@ -324,6 +355,9 @@ struct VirtualCard: View {
         DisplayCard(id: "virtual-\(config.id.uuidString)") {
             CardTitle(systemName: "display", title: config.name, subtitle: subtitle(live: live), active: live) {
                 Chip(text: config.hiDPIFor == nil ? "Virtual" : "HiDPI helper", tint: .blue)
+                if let vid, let master = store.physicalDisplays.first(where: { CGDisplayMirrorsDisplay(vid) == $0.id }) {
+                    Chip(text: "Mirrors \(master.isBuiltin ? "Built-in" : master.name)")
+                }
                 if let vid, vid == CGMainDisplayID(), store.layoutRevision >= 0 { Chip(text: "Main") }
             }
         } trailing: {
@@ -358,9 +392,10 @@ struct VirtualCard: View {
                     }
                 }
                 SettingsRow(title: "Orientation") {
-                    ValueMenu(value: config.isPortrait ? "Portrait" : "Landscape") {
-                        Toggle("Landscape", isOn: Binding(get: { !config.isPortrait }, set: { _ in store.setPortrait(config.id, false) }))
-                        Toggle("Portrait", isOn: Binding(get: { config.isPortrait }, set: { _ in store.setPortrait(config.id, true) }))
+                    // Virtual displays cannot be rotated by the system; 90° swaps width and height.
+                    ValueMenu(value: PhysicalCard.rotationTitle(config.isPortrait ? 90 : 0)) {
+                        Toggle(PhysicalCard.rotationTitle(0), isOn: Binding(get: { !config.isPortrait }, set: { _ in store.setPortrait(config.id, false) }))
+                        Toggle(PhysicalCard.rotationTitle(90), isOn: Binding(get: { config.isPortrait }, set: { _ in store.setPortrait(config.id, true) }))
                     }
                 }
                 SettingsRow(title: "HiDPI (Retina)") {
