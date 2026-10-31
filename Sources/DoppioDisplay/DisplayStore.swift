@@ -241,7 +241,6 @@ final class DisplayStore {
 
     /// Changes a physical display's mode (resolution / refresh rate).
     func setMode(_ display: CGDirectDisplayID, _ mode: CGDisplayMode) {
-        willReconfigureDisplays()
         report(DisplayModes.apply(mode, to: display), "Change display mode")
         refreshPhysical()
     }
@@ -249,7 +248,6 @@ final class DisplayStore {
     /// Makes `display` the main one (menu bar and Dock) and asks to keep it,
     /// reverting after 15 seconds otherwise — the display might not be visible.
     func makeMain(_ display: CGDirectDisplayID) {
-        willReconfigureDisplays()
         let previous = CGMainDisplayID()
         guard previous != display else { return }
         let error = DisplayLayout.makeMain(display)
@@ -284,7 +282,6 @@ final class DisplayStore {
 
     /// Makes `target` show `source` (hardware mirror), or stops it if it already does.
     func togglePhysicalMirror(source: PhysicalDisplay, target: PhysicalDisplay) {
-        willReconfigureDisplays()
         if target.mirrorMaster == source.id {
             report(DisplayManager.stopMirroring(target.id), "Stop mirroring")
             refreshAfterMirrorChange()
@@ -311,7 +308,6 @@ final class DisplayStore {
     /// Makes a virtual display show a physical one, e.g. the built-in panel, so it can be
     /// previewed or recorded at the virtual display's resolution. Not remembered across launches.
     func toggleVirtualMirrorsPhysical(_ id: UUID, physical: PhysicalDisplay) {
-        willReconfigureDisplays()
         guard let vid = liveIDs[id] else { return }
         if CGDisplayMirrorsDisplay(vid) == physical.id {
             report(DisplayManager.stopMirroring(vid), "Stop mirroring")
@@ -356,7 +352,6 @@ final class DisplayStore {
 
     /// Rotates a physical display (0, 90, 180, 270) and asks to keep it.
     func setRotation(_ display: PhysicalDisplay, _ degrees: Int) {
-        willReconfigureDisplays()
         let previous = Int(DPDisplayRotation(display.id))
         guard previous != degrees else { return }
         guard DPDisplaySetRotation(display.id, Int32(degrees)) else {
@@ -374,7 +369,6 @@ final class DisplayStore {
     }
 
     func toggleMirror(_ id: UUID, to target: PhysicalDisplay) {
-        willReconfigureDisplays()
         guard let vid = liveIDs[id] else { return }
         if target.mirrorMaster == vid {
             update(id) { $0.mirrorTargets.removeAll { $0 == target.key } }
@@ -589,11 +583,6 @@ final class DisplayStore {
             }
         }
         refreshPhysical()
-    }
-
-    /// Closes the menu bar panel before a change that moves windows around (see MenuBarWindowAnchor).
-    private func willReconfigureDisplays() {
-        NotificationCenter.default.post(name: .doppioWillReconfigureDisplays, object: nil)
     }
 
     /// Mirror changes settle in WindowServer a moment after the call returns; read them again then.

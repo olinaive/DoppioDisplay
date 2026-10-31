@@ -14,6 +14,7 @@ import AppKit
 ///     doppio://brightness?display=builtin|<name>&value=0.5
 ///     doppio://profile?name=Work             (action=apply|save; default apply)
 ///     doppio://settings?section=brightness
+///     doppio://menu                           (opens the menu bar panel)
 ///     doppio://panel?expand=builtin,virtual,arrangement   (panel as a floating window)
 @MainActor
 enum URLCommands {
@@ -75,6 +76,8 @@ enum URLCommands {
             }
             guard let match else { return fail("No display matches \(wanted)") }
             BrightnessStore.shared.setBrightness(match.key, value)
+        case "menu":
+            MenuBarController.shared.open()
         case "panel":
             if let expand = query["expand"] {
                 PanelState.shared.expand(expand.split(separator: ",").map(String.init))

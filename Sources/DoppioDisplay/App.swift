@@ -5,7 +5,6 @@ import SwiftUI
 @main
 struct DoppioDisplayApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @AppStorage("menuBarIcon") private var menuBarStyle = AppIcon.MenuBarStyle.twin.rawValue
 
     init() {
         if Bundle.main.bundleIdentifier == "app.doppiodisplay" {
@@ -48,14 +47,10 @@ struct DoppioDisplayApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra {
-            MenuPanel()
-        } label: {
-            Image(nsImage: AppIcon.menuBarImage(AppIcon.MenuBarStyle(rawValue: menuBarStyle) ?? .twin))
-        }
-        .menuBarExtraStyle(.window)
-
-
+        // The status item and its panel are AppKit (MenuBarController): SwiftUI's MenuBarExtra
+        // window cannot be positioned, and macOS moved it around when displays changed.
+        // An app needs at least one scene; this one never shows.
+        MenuBarExtra("DoppioDisplay", isInserted: .constant(false)) { EmptyView() }
     }
 }
 
@@ -76,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         installURLHandler()
         DisplayStore.shared.start()
+        MenuBarController.shared.install()
         XDRBoost.shared.resume()
         HotKeys.shared.start()
     }
@@ -91,7 +87,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        CursorCapture.shared.end()
         DisplayStore.shared.shutdown()
         XDRBoost.shared.stop()
         BrightnessStore.shared.restoreGamma()

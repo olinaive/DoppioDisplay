@@ -77,6 +77,11 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
             self?.setTrafficLightsVisible(hovering)
         }
         setTrafficLightsVisible(false)
+        // The green button goes full screen (instead of zooming), like in other apps.
+        if let zoom = window.standardWindowButton(.zoomButton) {
+            zoom.target = self
+            zoom.action = #selector(fullScreenButton(_:))
+        }
 
         capture.onStop = { [weak self] error in
             if let error { NSLog("DoppioDisplay: capture stopped: \(error.localizedDescription)") }
@@ -145,6 +150,10 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
         model.framesPerSecond = fps
         PreviewSettings.framesPerSecond = fps
         Task { await capture.setFramesPerSecond(fps) }
+    }
+
+    @objc private func fullScreenButton(_ sender: Any?) {
+        toggleFullScreen()
     }
 
     /// Native full screen in its own Space. Floating, all-Spaces windows cannot go full
@@ -254,7 +263,6 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
     // MARK: NSWindowDelegate
 
     func windowDidMiniaturize(_ notification: Notification) {
-        if let displayID = model.displayID { CursorCapture.shared.end(for: displayID) }
         if PreviewSettings.liveDockThumbnail {
             // A couple of frames per second keep the Dock thumbnail alive cheaply.
             Task { await capture.setFramesPerSecond(2) }
@@ -278,7 +286,6 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
         isClosed = true
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
-        if let displayID = model.displayID { CursorCapture.shared.end(for: displayID) }
         Task { await capture.stop() }
         onStateChange?(.closed)
     }
@@ -299,7 +306,7 @@ struct PreviewActions {
 @Observable
 final class PreviewModel {
     let source: PreviewSource
-    /// Nil for window previews (no cursor capture there).
+    /// Nil for window previews.
     let displayID: CGDirectDisplayID?
     var geometry = PreviewGeometry()
     var framesPerSecond = 60
@@ -317,8 +324,7 @@ final class PreviewModel {
 
 /// Layer-backed view showing the captured frames.
 /// Plain click and drag: moves the window.
-/// Double-click or Command-click on a display preview: captures the cursor into
-/// that display (Command-Escape releases it); without Accessibility it just moves the cursor there.
+/// Double-click: full screen.
 final class PreviewView: NSView {
     private let model: PreviewModel
     let frameLayer = CALayer()
@@ -453,43 +459,12 @@ final class PreviewView: NSView {
             selectionStart = convert(event.locationInWindow, from: nil)
             return
         }
-        guard let displayID = model.displayID,
-              event.clickCount == 2 || event.modifierFlags.contains(.command) else {
+        // Double-click toggles full screen; a plain drag moves the window.
+        if event.clickCount == 2 {
+            model.actions.toggleFullScreen()
+        } else {
             window?.performDrag(with: event)
-            return
         }
-        let point = convert(event.locationInWindow, from: nil)
-        let target = CGDisplayBounds(displayID)
-        guard bounds.width > 0, bounds.height > 0, !target.isEmpty else { return }
-        let geometry = model.geometry
-        // AppKit has a bottom-left origin, display space a top-left one.
-        let content = geometry.contentPoint(fromView: CGPoint(x: point.x / bounds.width, y: 1 - point.y / bounds.height))
-        let location = CGPoint(x: target.minX + content.x * target.width, y: target.minY + content.y * target.height)
-
-        // Physical cursor movement is scaled so it tracks the preview, not the full display.
-        let shownWidth = geometry.quarterTurns.isMultiple(of: 2) ? bounds.width : bounds.height
-        let scale = target.width * geometry.crop.width / shownWidth
-        let started = CursorCapture.shared.begin(displayID: displayID, at: location, scale: scale) { [weak self] final in
-            self?.returnCursor(from: final, displayID: displayID)
-        }
-        if !started {
-            CGWarpMouseCursorPosition(location)
-        }
-    }
-
-    /// After release, put the cursor over the matching spot of the preview.
-    private func returnCursor(from location: CGPoint, displayID: CGDirectDisplayID) {
-        guard let window, window.isVisible, !window.isMiniaturized else { return }
-        let target = CGDisplayBounds(displayID)
-        let content = CGPoint(x: (location.x - target.minX) / target.width, y: (location.y - target.minY) / target.height)
-        var view = model.geometry.viewPoint(fromContent: content)
-        view.x = min(max(view.x, 0), 1)
-        view.y = min(max(view.y, 0), 1)
-        let local = NSPoint(x: view.x * bounds.width, y: (1 - view.y) * bounds.height)
-        let onScreen = window.convertPoint(toScreen: convert(local, to: nil))
-        // Cocoa screen space has a bottom-left origin at the primary display.
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
-        CGWarpMouseCursorPosition(CGPoint(x: onScreen.x, y: primaryHeight - onScreen.y))
     }
 }
 
@@ -511,14 +486,10 @@ final class ToolbarHostingView<Content: View>: NSHostingView<Content> {
 struct PreviewToolbar: View {
     let model: PreviewModel
     private var store: DisplayStore { .shared }
-    private var cursor: CursorCapture { .shared }
 
     var body: some View {
-        let captured = model.displayID != nil && cursor.capturedDisplay == model.displayID
         VStack(spacing: 8) {
-            if captured {
-                banner("Cursor captured · ⌘⎋ to release", systemImage: "cursorarrow.rays")
-            } else if model.isSelectingCrop {
+            if model.isSelectingCrop {
                 banner("Drag to select an area · ⎋ to cancel", systemImage: "crop")
             }
             GlassEffectContainer(spacing: 8) {
@@ -528,11 +499,6 @@ struct PreviewToolbar: View {
                         MirrorMenu(config: config, compact: true)
                     }
                     viewMenu
-                    Button(action: model.actions.toggleFullScreen) {
-                        Image(systemName: model.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                    }
-                    .help(model.isFullScreen ? "Exit full screen (⎋)" : "Full screen")
-                    .buttonStyle(.glass)
                     Button(action: model.actions.togglePin) {
                         Image(systemName: model.isPinned ? "pin.fill" : "pin.slash")
                     }
@@ -540,7 +506,7 @@ struct PreviewToolbar: View {
                     .buttonStyle(.glass)
                 }
             }
-            .opacity(model.isHovering && !captured && !model.isSelectingCrop ? 1 : 0)
+            .opacity(model.isHovering && !model.isSelectingCrop ? 1 : 0)
             .offset(y: model.isHovering ? 0 : 6)
         }
         .controlSize(.regular)

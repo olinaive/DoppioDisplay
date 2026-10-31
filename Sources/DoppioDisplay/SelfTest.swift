@@ -114,32 +114,42 @@ enum SelfTest {
     }
 
     static func mirrorProbe() -> Int32 {
-        guard let builtin = DisplayManager.onlineDisplayIDs().first(where: { CGDisplayIsBuiltin($0) != 0 }) else {
+        guard let builtin = DisplayManager.onlineDisplayIDs().first(where: { CGDisplayIsBuiltin($0) != 0 }),
+              let builtinMode = CGDisplayCopyDisplayMode(builtin) else {
             print("no built-in display")
             return 1
         }
-        var config = VirtualDisplayConfig(name: "Mirror Probe", width: 1280, height: 720)
-        config.hiDPI = false
-        guard let display = VirtualDisplay(config: config), display.waitUntilOnline() else {
-            print("virtual display not created")
-            return 1
-        }
-        let vid = display.displayID
-        func state(_ label: String) {
-            print("\(label): virtual mirrors \(CGDisplayMirrorsDisplay(vid)) (built-in is \(builtin)), online: \(DisplayManager.onlineDisplayIDs().contains(vid))")
+        func describe(_ mode: CGDisplayMode?) -> String {
+            guard let mode else { return "?" }
+            return "\(mode.width)x\(mode.height) pt / \(mode.pixelWidth)x\(mode.pixelHeight) px @\(mode.refreshRate)"
         }
         func wait(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
 
-        print("mirror:", DisplayManager.mirror(vid, of: builtin).rawValue)
-        state("right after mirror")
-        wait(1)
-        state("1 s after mirror")
-        print("stop:", DisplayManager.stopMirroring(vid).rawValue)
-        state("right after stop")
-        wait(1)
-        state("1 s after stop")
-        display.destroy()
-        _ = VirtualDisplay.waitUntilOffline(vid)
+        // Case A: an arbitrary 1280×720 display. Case B: one matching the built-in mode exactly.
+        var arbitrary = VirtualDisplayConfig(name: "Mirror Probe A", width: 1280, height: 720)
+        arbitrary.hiDPI = false
+        var matching = VirtualDisplayConfig(name: "Mirror Probe B", width: UInt32(builtinMode.width), height: UInt32(builtinMode.height))
+        matching.hiDPI = builtinMode.pixelWidth > builtinMode.width
+        matching.refreshRate = builtinMode.refreshRate > 0 ? builtinMode.refreshRate : 60
+
+        print("built-in before: \(describe(builtinMode))")
+        for config in [arbitrary, matching] {
+            guard let display = VirtualDisplay(config: config), display.waitUntilOnline() else {
+                print("\(config.name): not created")
+                continue
+            }
+            let vid = display.displayID
+            print("\(config.name): virtual \(describe(CGDisplayCopyDisplayMode(vid)))")
+            print("  mirror:", DisplayManager.mirror(vid, of: builtin).rawValue)
+            wait(1)
+            print("  built-in while mirrored: \(describe(CGDisplayCopyDisplayMode(builtin))), virtual mirrors \(CGDisplayMirrorsDisplay(vid))")
+            DisplayManager.stopMirroring(vid)
+            wait(1)
+            print("  built-in after stop: \(describe(CGDisplayCopyDisplayMode(builtin)))")
+            display.destroy()
+            _ = VirtualDisplay.waitUntilOffline(vid)
+            wait(0.5)
+        }
         return 0
     }
 }

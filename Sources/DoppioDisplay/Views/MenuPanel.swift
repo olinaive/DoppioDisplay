@@ -58,7 +58,6 @@ struct MenuPanel: View {
         }
         .padding(12)
         .frame(width: 360)
-        .background(MenuBarWindowAnchor())
         // Do not start with the cursor in a text field (the display name): typing would rename it.
         .onAppear {
             DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) }

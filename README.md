@@ -49,8 +49,7 @@ extra brightness** of every display — all from a Liquid Glass panel in the men
 - Live preview of any virtual or physical display, or of a single window (system picker).
 - Crop an area, rotate, flip, 15–120 fps, keep on top, minimize to the Dock (optionally
   with a live thumbnail).
-- **Work inside the preview:** double-click or ⌘-click captures the cursor into the
-  previewed display; ⌘⎋ releases it.
+- Full screen with the green window button or a double-click.
 
 **Brightness and color**
 - Built-in display: hardware brightness, resolution and refresh rate (ProMotion),
@@ -93,8 +92,8 @@ extra brightness** of every display — all from a Liquid Glass panel in the men
 
    Or in Terminal: `xattr -dr com.apple.quarantine /Applications/DoppioDisplay.app`
 
-Updates are signed with the same certificate, so macOS keeps your permissions when you
-replace the app with a newer version.
+Updates are signed with the same certificate, so macOS keeps the Screen Recording
+permission when you replace the app with a newer version.
 
 ### Build from source
 
@@ -105,7 +104,7 @@ git clone https://github.com/olinaive/DoppioDisplay.git
 cd DoppioDisplay
 
 # Optional but recommended: a local signing certificate, so macOS keeps
-# Screen Recording / Accessibility permissions across rebuilds.
+# the Screen Recording permission across rebuilds.
 ./scripts/create-signing-identity.sh
 
 ./scripts/build-app.sh          # → build/DoppioDisplay.app
@@ -121,7 +120,6 @@ information and can be removed in Keychain Access.
 | Permission | Needed for |
 |---|---|
 | Screen & System Audio Recording | Previews and picture in picture |
-| Accessibility | Working inside a preview (cursor capture) |
 | Administrator password (once) | Installing the `doppio` command into `/usr/local/bin` |
 
 Grant them in **System Settings › Privacy & Security**; the app links there from
@@ -134,8 +132,8 @@ Grant them in **System Settings › Privacy & Security**; the app links there fr
 1. Click the menu bar icon, then **New Virtual Display**.
 2. Expand the display card to change resolution, HiDPI, refresh rate, orientation, color,
    or **Mirror To** an external monitor.
-3. **Preview** opens the picture-in-picture window. Double-click inside it to work on that
-   display; press **⌘⎋** to get the cursor back.
+3. **Preview** opens the picture-in-picture window. Double-click it (or use the green
+   window button) for full screen; **⎋** leaves full screen.
 4. Expand **Arrangement** and drag a virtual display to place it next to your screens.
 5. Save the setup from the profiles menu (stack icon) and give it a rule in
    **Settings › Profiles** to apply it automatically.
@@ -149,7 +147,6 @@ Grant them in **System Settings › Privacy & Security**; the app links there fr
 | ⌃⌥⌘X | XDR Boost on/off |
 | ⌃⌥⌘↑ / ↓ | Brightness of the display under the cursor |
 | ⌃⌥⌘1…9 | Apply profile 1…9 |
-| ⌘⎋ | Release a captured cursor |
 
 ### URL scheme and command line
 
@@ -159,13 +156,14 @@ open "doppio://preview?action=toggle"
 open "doppio://xdr?on=toggle&level=0.8"
 open "doppio://brightness?display=builtin&value=0.6"
 open "doppio://profile?name=Desk"
+open "doppio://menu"                               # open the menu bar panel
 open "doppio://panel?expand=builtin,arrangement"   # panel as a floating window
 
 doppio create width=2560 height=1440               # after Settings › Automation › Install
 ```
 
 Commands: `create`, `enable`, `disable`, `toggle`, `remove`, `resolution`, `preview`,
-`mirror`, `xdr`, `brightness`, `profile`, `settings`, `panel`. Parameters are documented
+`mirror`, `xdr`, `brightness`, `profile`, `settings`, `menu`, `panel`. Parameters are documented
 in [`URLCommands.swift`](Sources/DoppioDisplay/URLCommands.swift).
 
 ## How it works

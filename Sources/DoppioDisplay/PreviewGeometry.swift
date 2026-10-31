@@ -3,7 +3,7 @@ import Foundation
 
 /// How captured content is shown in a preview: an optional crop, quarter turns
 /// clockwise and a horizontal flip. All points are normalized (0...1) with a
-/// top-left origin, so the same maths serves cursor capture and crop selection.
+/// top-left origin, so the same maths serves the view and crop selection.
 struct PreviewGeometry: Equatable {
     /// Part of the full content shown; the unit rect means no crop.
     var crop = CGRect(x: 0, y: 0, width: 1, height: 1)

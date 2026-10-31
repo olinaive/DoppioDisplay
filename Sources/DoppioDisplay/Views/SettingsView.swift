@@ -230,12 +230,10 @@ private struct PreviewSettingsPane: View {
                 }
             }
             Section {
-                LabeledContent("Capture cursor") { KeyCaps(["Double-click"]); Text("or").foregroundStyle(.secondary); KeyCaps(["⌘", "Click"]) }
-                LabeledContent("Release cursor") { KeyCaps(["⌘", "⎋"]) }
+                LabeledContent("Full screen") { KeyCaps(["Double-click"]); Text("or the green window button").foregroundStyle(.secondary) }
+                LabeledContent("Leave full screen") { KeyCaps(["⎋"]) }
             } header: {
-                Text("Working Inside a Preview")
-            } footer: {
-                Text("Capturing the cursor needs Accessibility permission. Without it, a double-click only moves the cursor to that spot.")
+                Text("Full Screen")
             }
         }
     }
@@ -491,7 +489,6 @@ enum CommandLineTool {
 
 private struct PermissionsSettings: View {
     @State private var screenRecording = CGPreflightScreenCaptureAccess()
-    @State private var accessibility = CursorCapture.isTrusted
 
     var body: some View {
         Form {
@@ -505,22 +502,12 @@ private struct PermissionsSettings: View {
                     Text("Screen & System Audio Recording")
                     Text("Previews and picture in picture.")
                 }
-                LabeledContent {
-                    status(accessibility) {
-                        CursorCapture.requestTrust()
-                        open("Privacy_Accessibility")
-                    }
-                } label: {
-                    Text("Accessibility")
-                    Text("Working inside a preview (cursor capture).")
-                }
             } footer: {
                 Text("With a development build macOS may ask again after each rebuild, because the code signature changes.")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             screenRecording = CGPreflightScreenCaptureAccess()
-            accessibility = CursorCapture.isTrusted
         }
     }
 

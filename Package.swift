@@ -23,7 +23,6 @@ let package = Package(
                 .linkedFramework("Metal"),
                 .linkedFramework("QuartzCore"),
                 .linkedFramework("Carbon"),
-                .linkedFramework("ApplicationServices"),
                 .linkedFramework("ColorSync"),
                 .linkedFramework("IOKit"),
             ]
