@@ -6,6 +6,9 @@
 #   scripts/qa.sh thread      # Thread Sanitizer
 #   scripts/qa.sh leaks       # release build, scenario × N, then `leaks` and memory footprint
 #
+# Every mode prints the memory footprint and CPU time per round, and the idle CPU load
+# before and after the rounds (should be ~0 % when no preview or mirror is open).
+#
 # The scenario creates and removes a virtual display, opens previews, shows the built-in
 # display on it (software mirror), opens the menu bar panel, the floating panel and every
 # settings section. It quits a running DoppioDisplay first.
@@ -46,8 +49,15 @@ sleep 5
 
 url() { open -g "doppio://$1"; sleep "${2:-1.5}"; }
 footprint_mb() { footprint -p "$PID" 2>/dev/null | awk '/phys_footprint:/ {print $2, $3; exit}'; }
+# CPU time used by the app so far, in seconds (ps prints [hh:]mm:ss.ss).
+cpu_seconds() { LC_ALL=C ps -o time= -p "$PID" | LC_ALL=C awk -F: '{ s = 0; for (i = 1; i <= NF; i++) s = s * 60 + $i; print s }'; }
+# Average CPU load while the app sits idle for $1 seconds.
+idle_cpu() {
+    local before=$(cpu_seconds); sleep "$1"; local after=$(cpu_seconds)
+    LC_ALL=C awk -v a="$before" -v b="$after" -v t="$1" 'BEGIN { printf "%.1f%%", (b - a) / t * 100 }'
+}
 
-echo "start footprint: $(footprint_mb)"
+echo "start footprint: $(footprint_mb), idle CPU $(idle_cpu 10)"
 for round in $(seq 1 "$ROUNDS"); do
     url "create?width=1920&height=1080&name=QA%20Display" 4
     url "preview?name=QA&action=hide"
@@ -64,8 +74,9 @@ for round in $(seq 1 "$ROUNDS"); do
     url "xdr?on=1" 2
     url "xdr?on=0" 1
     url "remove?name=QA" 3
-    echo "round $round footprint: $(footprint_mb)"
+    echo "round $round footprint: $(footprint_mb), CPU time $(cpu_seconds) s"
 done
+echo "idle after rounds: CPU $(idle_cpu 15)"
 
 if [[ "$MODE" == leaks ]]; then
     leaks "$PID" > "build/QA/leaks.txt" 2>&1 || true
