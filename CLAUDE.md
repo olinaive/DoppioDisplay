@@ -1,4 +1,8 @@
-# DoppioDisplay
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## DoppioDisplay
 
 macOS 26+ menu bar app (Apple Silicon): virtual displays, mirroring, picture in picture,
 brightness (native / DDC / software), XDR Boost, presets and ICC profiles, Night Shift and
@@ -18,6 +22,8 @@ Formerly "VDisplay" (bundle `local.vdisplay`); settings are migrated once (`Lega
 ./scripts/build-app.sh                  # release build → build/DoppioDisplay.app (sets DEVELOPER_DIR to Xcode)
 open build/DoppioDisplay.app            # quit the running one first: osascript -e 'tell application id "app.doppiodisplay" to quit'
 swift test                              # unit tests (swift-testing), needs DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+swift test --filter "Preview geometry"  # one suite or test (matches @Suite/@Test names in Tests/DoppioDisplayTests)
+scripts/doppio create width=2560 height=1440 hidpi=1   # CLI: wraps `open -g doppio://<command>?key=value`
 scripts/qa.sh address|thread|leaks      # scripted scenario under ASan+Main Thread Checker / TSan / leaks (NOMSL=1 ROUNDS=6 for footprint)
 build/DoppioDisplay.app/Contents/MacOS/DoppioDisplay --selftest   # also: --brightness-probe --xdr-probe --color-probe --config-probe --mirror-probe
 ```
@@ -59,6 +65,8 @@ Sources/DoppioDisplay/
   PreviewWindow.swift     PiP window: crop/rotate/flip/fps, full screen (green button, double-click)
   Brightness/             BrightnessStore, DDC (IOAVService), XDRBoost (EDR + gamma), ColorControls
   Profiles.swift, HotKeys.swift, URLCommands.swift, AppIcon.swift (icon + menu bar glyphs in code)
+  Models.swift (presets, saved config types), PreviewGeometry.swift (crop/rotate/flip math, unit-tested),
+  WindowPicker.swift (SCContentSharingPicker for window PiP), SelfTest.swift (--selftest / probes)
   Views/                  MenuPanel (cards), PanelComponents (shared row/menu styles), ArrangementMap,
                           Controls, SettingsView (AppKit-hosted window with sidebar)
 Sources/CPrivateAPI/      CGVirtualDisplay declarations; shim.m: CoreBrightness, MonitorPanel (presets, rotation)
@@ -71,6 +79,12 @@ design/tools/             icon and README hero generators (design/ itself is git
 - **Private APIs** are resolved at runtime (dlsym / NSClassFromString / respondsToSelector);
   controls hide when missing. `CGVirtualDisplaySettings.rotation` does nothing on macOS 27
   (virtual "90°" swaps width/height). MonitorPanel rotation works for physical displays.
+- **Virtual display modes change in place**: `applySettings` on the live `CGVirtualDisplay`
+  (descriptor `maxPixels` sized for the largest HiDPI mode) keeps the display ID; WindowServer
+  switches within ~1 s. Recreating with the same serial fails while the old one lingers (the
+  object is autoreleased, hence the `autoreleasepool` in `VirtualDisplay.init`). Do not pick
+  virtual modes with `CGConfigureDisplayWithDisplayMode`: WindowServer remembers that choice per
+  serial and later prefers it over the modes we pass.
 - **Hardware mirroring forces one mode on both displays.** Physical → virtual therefore uses
   `SoftwareMirror`; virtual → physical stays hardware (HiDPI trick, custom built-in resolutions).
   Guard against feedback loops (a display shown on a virtual one that mirrors it back).

@@ -210,6 +210,12 @@ final class PreviewWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// The captured display switched mode: show its new title, pick up the new aspect.
+    func displayChanged(title: String) {
+        window.title = title
+        restartCapture()
+    }
+
     /// Rebuilds the capture, e.g. so a new software-mirror window on this display is included.
     func restartCapture() {
         guard !isClosed, !window.isMiniaturized else { return }

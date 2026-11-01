@@ -69,8 +69,8 @@ struct VirtualDisplayConfig: Codable, Identifiable, Hashable {
         return bytes.prefix(4).reduce(0) { $0 << 8 | UInt32($1) } | 1
     }
 
-    /// Fields that require recreating the CGVirtualDisplay when changed.
-    func needsRecreate(comparedTo other: VirtualDisplayConfig) -> Bool {
+    /// Fields that switch the display's mode when changed.
+    func needsModeChange(comparedTo other: VirtualDisplayConfig) -> Bool {
         width != other.width || height != other.height
             || hiDPI != other.hiDPI || refreshRate != other.refreshRate
     }

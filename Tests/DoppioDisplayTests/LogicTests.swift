@@ -90,15 +90,15 @@ struct DecodingTests {
         #expect(config.serial != 0)
     }
 
-    @Test func onlyModeChangesNeedARecreate() {
+    @Test func onlyModeFieldsChangeTheMode() {
         let base = VirtualDisplayConfig(name: "A", width: 1920, height: 1080)
         var renamed = base
         renamed.name = "B"
         renamed.keepAwake = .whileOn
-        #expect(!renamed.needsRecreate(comparedTo: base))
+        #expect(!renamed.needsModeChange(comparedTo: base))
         var resized = base
         resized.width = 2560
-        #expect(resized.needsRecreate(comparedTo: base))
+        #expect(resized.needsModeChange(comparedTo: base))
     }
 
     @Test func profileWithoutTriggerIsManual() throws {

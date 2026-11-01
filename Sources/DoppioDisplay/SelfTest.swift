@@ -21,10 +21,28 @@ enum SelfTest {
         let mode = CGDisplayCopyDisplayMode(id)
         print("OK: display \(id) online, \(mode?.width ?? 0)x\(mode?.height ?? 0) pt, \(mode?.pixelWidth ?? 0)x\(mode?.pixelHeight ?? 0) px")
 
+        // Size, HiDPI and refresh rate change in place: same display ID, new mode.
+        var failed = false
+        for (width, height, hiDPI, rate) in [(1920, 1080, false, 60.0), (2560, 1440, true, 60), (1280, 720, true, 30), (1080, 1920, true, 60)] {
+            var wanted = config
+            wanted.width = UInt32(width)
+            wanted.height = UInt32(height)
+            wanted.hiDPI = hiDPI
+            wanted.refreshRate = rate
+            let applied = display.apply(wanted)
+            let deadline = Date().addingTimeInterval(2)
+            while applied, !display.isShowing(wanted), Date() < deadline {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            }
+            let ok = applied && display.isShowing(wanted) && display.displayID == id
+            failed = failed || !ok
+            print("\(ok ? "OK" : "FAIL"): in place \(width)x\(height)\(hiDPI ? " HiDPI" : "") @ \(Int(rate)) Hz")
+        }
+
         display.destroy()
         let gone = VirtualDisplay.waitUntilOffline(id)
         print(gone ? "OK: display removed" : "FAIL: display still online after release")
-        return gone ? 0 : 1
+        return gone && !failed ? 0 : 1
     }
 
     static func brightnessProbe() -> Int32 {

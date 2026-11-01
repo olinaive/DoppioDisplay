@@ -50,6 +50,11 @@ final class DisplayStore {
     /// "virtualID->targetID" pairs already tried, so a failing mirror does not loop.
     @ObservationIgnored private var attemptedMirrors: Set<String> = []
     @ObservationIgnored private var reconcileScheduled = false
+    /// Above zero while displays are being created or removed. Those steps wait for
+    /// WindowServer by running the run loop, so a reconcile could otherwise fire in between.
+    @ObservationIgnored private var transitionDepth = 0
+    /// Bumped on every in-place mode change, so a newer change cancels the older wait.
+    @ObservationIgnored private var modeChangeGeneration: [UUID: Int] = [:]
 
     private enum Keys {
         static let configs = "virtualDisplayConfigs"
@@ -173,8 +178,8 @@ final class DisplayStore {
             teardown(id)
         } else if displays[id] == nil {
             createDisplay(for: new, openPreview: previewOnCreate)
-        } else if new.needsRecreate(comparedTo: old) {
-            recreate(id)
+        } else if new.needsModeChange(comparedTo: old) {
+            changeMode(id)
         } else if new.placement != old.placement || new.relativeOrigin != old.relativeOrigin, let vid = liveIDs[id] {
             report(DisplayLayout.apply(new, to: vid), "Arrange")
             refreshPhysical()
@@ -184,7 +189,7 @@ final class DisplayStore {
     }
 
     /// Makes the virtual displays match a profile: removes extras, updates
-    /// existing ones in place (recreating only when size, HiDPI or Hz differ)
+    /// existing ones in place
     /// and creates missing ones.
     func apply(configs wanted: [VirtualDisplayConfig]) {
         let wantedIDs = Set(wanted.map(\.id))
@@ -548,6 +553,8 @@ final class DisplayStore {
 
     @discardableResult
     private func createDisplay(for config: VirtualDisplayConfig, openPreview: Bool) -> Bool {
+        transitionDepth += 1
+        defer { transitionDepth -= 1 }
         guard let display = VirtualDisplay(config: config) else {
             lastError = "WindowServer refused \(config.resolutionTitle)\(config.hiDPI ? " HiDPI" : "") @ \(Int(config.refreshRate)) Hz."
             update(config.id) { $0.isEnabled = false }
@@ -563,15 +570,56 @@ final class DisplayStore {
         liveIDs[config.id] = display.displayID
         DisplayLayout.apply(config, to: display.displayID)
         applyMirrors(for: config.id)
-        // Resolution changes recreate the display; carry a software mirror over to it.
+        // A recreated display (e.g. after WindowServer restarted) takes the software mirror over.
         if softwareSources[config.id] != nil { startSoftwareMirror(config.id) }
         refreshPhysical()
         if openPreview { showPreview(config.id) }
         return true
     }
 
-    /// Size, HiDPI and refresh rate are baked into the CGVirtualDisplay, so a change rebuilds it.
+    /// Size, HiDPI and refresh rate change on the live display, which keeps its ID,
+    /// windows, arrangement and mirrors. WindowServer switches the mode asynchronously;
+    /// once it has, the preview and a software mirror are resized to it.
+    private func changeMode(_ id: UUID) {
+        guard let display = displays[id], let config = config(id) else { return }
+        guard display.apply(config) else {
+            NSLog("DoppioDisplay: in-place mode change refused, recreating \(config.name)")
+            recreate(id)
+            return
+        }
+        let generation = (modeChangeGeneration[id] ?? 0) + 1
+        modeChangeGeneration[id] = generation
+        waitForMode(id, generation: generation, deadline: Date().addingTimeInterval(2))
+    }
+
+    private func waitForMode(_ id: UUID, generation: Int, deadline: Date) {
+        guard modeChangeGeneration[id] == generation, let display = displays[id], let config = config(id) else { return }
+        if display.isShowing(config) {
+            modeDidChange(id)
+        } else if Date() < deadline {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.waitForMode(id, generation: generation, deadline: deadline)
+            }
+        } else {
+            // WindowServer kept another mode (e.g. one remembered for this display); start over.
+            NSLog("DoppioDisplay: \(config.name) did not switch to \(config.resolutionTitle), recreating")
+            recreate(id)
+        }
+    }
+
+    private func modeDidChange(_ id: UUID) {
+        guard let config = config(id) else { return }
+        if softwareMirrors[id] != nil {
+            stopSoftwareMirror(id, keepSource: true)
+            startSoftwareMirror(id)
+        }
+        previews[.virtual(id)]?.displayChanged(title: "\(config.name) — \(config.resolutionTitle)")
+        refreshPhysical()
+    }
+
+    /// Fallback when the mode cannot change in place.
     private func recreate(_ id: UUID) {
+        modeChangeGeneration[id, default: 0] += 1
         let hadPreview = previews[.virtual(id)] != nil
         teardown(id)
         guard let config = config(id) else { return }
@@ -579,6 +627,8 @@ final class DisplayStore {
     }
 
     private func teardown(_ id: UUID) {
+        transitionDepth += 1
+        defer { transitionDepth -= 1 }
         previews[.virtual(id)]?.close()
         stopSoftwareMirror(id, keepSource: true)
         guard let display = displays.removeValue(forKey: id) else { return }
@@ -620,6 +670,10 @@ final class DisplayStore {
     /// vanished (e.g. WindowServer restart) and re-applies mirrors for monitors
     /// that came back after sleep or replugging.
     private func reconcile() {
+        guard transitionDepth == 0 else {
+            scheduleReconcile()
+            return
+        }
         for config in configs where config.isEnabled {
             if let display = displays[config.id], !display.isOnline {
                 displays[config.id] = nil
